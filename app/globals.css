@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --color-magenta: #E6007E;
+  --color-magenta-dark: #B8005F;
+  --color-gold: #C9A227;
+  --color-cream: #FFF8F3;
+}
+
+@theme inline {
+  --color-magenta: var(--color-magenta);
+  --color-magenta-dark: var(--color-magenta-dark);
+  --color-gold: var(--color-gold);
+  --color-cream: var(--color-cream);
+  --font-display: var(--font-jakarta);
+  --font-body: var(--font-poppins);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--color-cream);
+  font-family: var(--font-poppins), sans-serif;
+}
+h1, h2, h3, .font-display {
+  font-family: var(--font-jakarta), sans-serif;
+}
