@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Power, Clock } from "lucide-react";
 import { getLocationById } from "@/lib/locations";
-import { getStoreStatus, setManualClosed, StoreStatus } from "@/lib/store-status";
+import { getStoreStatus, setManualClosed, setManualOpen, StoreStatus } from "@/lib/store-status";
 
 export default function StoreStatusPage() {
   const params = useParams();
@@ -30,8 +30,6 @@ export default function StoreStatusPage() {
 
   useEffect(() => {
     load();
-    // Refresh every minute so the "within scheduled hours" state stays
-    // accurate even if the admin leaves this page open past 2pm/midnight.
     const interval = setInterval(load, 60_000);
     return () => clearInterval(interval);
   }, [locationId]);
@@ -42,6 +40,20 @@ export default function StoreStatusPage() {
     setError("");
     try {
       await setManualClosed(locationId, !status.manuallyClosed);
+      await load();
+    } catch {
+      setError("Failed to update store status. Please try again.");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function handleForceOpenToggle() {
+    if (!status) return;
+    setUpdating(true);
+    setError("");
+    try {
+      await setManualOpen(locationId, !status.manuallyOpened);
       await load();
     } catch {
       setError("Failed to update store status. Please try again.");
@@ -92,6 +104,8 @@ export default function StoreStatusPage() {
             <p className="text-black/50 text-sm mb-8">
               {status.manuallyClosed
                 ? "Closed manually for the rest of today"
+                : status.manuallyOpened
+                ? "Forced open early for the rest of today"
                 : status.withinScheduledHours
                 ? "Within scheduled hours (2 PM – 11:59 PM)"
                 : "Outside scheduled hours"}
@@ -112,6 +126,26 @@ export default function StoreStatusPage() {
                 ? "Turn Store Back On"
                 : "Close Store For Today"}
             </button>
+
+            {/* Only shown when the schedule itself wouldn't have the store
+                open, and the admin hasn't closed it for the day. */}
+            {!status.manuallyClosed && !status.withinScheduledHours && (
+              <button
+                onClick={handleForceOpenToggle}
+                disabled={updating}
+                className={`w-full py-4 rounded-full font-bold transition disabled:opacity-50 mt-3 ${
+                  status.manuallyOpened
+                    ? "bg-red-500 text-white hover:bg-red-600"
+                    : "bg-black text-white hover:bg-black/80"
+                }`}
+              >
+                {updating
+                  ? "Updating..."
+                  : status.manuallyOpened
+                  ? "Cancel Early Opening"
+                  : "Open Store Now (Outside Schedule)"}
+              </button>
+            )}
 
             <div className="flex items-center justify-center gap-2 text-xs text-black/40 mt-6">
               <Clock size={13} />
