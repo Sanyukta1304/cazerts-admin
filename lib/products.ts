@@ -207,3 +207,71 @@ export async function deleteProductGalleryImage(imageId: string): Promise<void> 
     throw error;
   }
 }
+
+// Renames a product in place — same "click to edit, saves immediately"
+// pattern as the photo upload above, just for the name field instead.
+export async function updateProductName(productId: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Product name can't be empty.");
+  }
+
+  const { data: updated, error } = await supabase
+    .from("products")
+    .update({ name: trimmed })
+    .eq("id", productId)
+    .select("id");
+
+  if (error) {
+    console.error("Error updating product name:", error);
+    throw error;
+  }
+  if (!updated || updated.length === 0) {
+    throw new Error(
+      "Name wasn't saved (likely a permissions issue). Please check Supabase RLS policies on the products table."
+    );
+  }
+}
+
+// Creates a brand new product under an existing category. Used by the
+// "Add New Product" form — image can be attached afterwards using the
+// existing uploadProductImage() flow.
+export async function createProduct(input: {
+  categoryId: string;
+  name: string;
+  description: string;
+  price: number;
+}): Promise<AdminProduct> {
+  const name = input.name.trim();
+  if (!name) throw new Error("Product name can't be empty.");
+  if (!input.categoryId) throw new Error("Please choose a category.");
+  if (!Number.isFinite(input.price) || input.price <= 0) {
+    throw new Error("Please enter a valid price.");
+  }
+
+  const { data, error } = await supabase
+    .from("products")
+    .insert({
+      category_id: input.categoryId,
+      name,
+      description: input.description.trim(),
+      price: input.price,
+    })
+    .select("id, name, description, price, image_url, category_id, categories(name)")
+    .single();
+
+  if (error) {
+    console.error("Error creating product:", error);
+    throw error;
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    description: data.description,
+    price: data.price,
+    imageUrl: data.image_url,
+    categoryId: data.category_id,
+    categoryName: (data as any).categories?.name ?? "Uncategorized",
+  };
+}

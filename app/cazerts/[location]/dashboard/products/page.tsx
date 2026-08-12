@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ImagePlus, Loader2, Check, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { ArrowLeft, ImagePlus, Loader2, Check, ChevronDown, ChevronUp, Trash2, Plus, X } from "lucide-react";
 import {
   getAdminProducts,
   uploadProductImage,
+  updateProductName,
+  createProduct,
   getProductGallery,
   addProductGalleryImage,
   deleteProductGalleryImage,
@@ -14,7 +16,7 @@ import {
   ProductGalleryImage,
   MAX_GALLERY_IMAGES,
 } from "@/lib/products";
-import { getAdminCategories, uploadCategoryImage, AdminCategory } from "@/lib/categories";
+import { getAdminCategories, uploadCategoryImage, createCategory, AdminCategory } from "@/lib/categories";
 
 export default function ProductsPage() {
   const params = useParams();
@@ -31,6 +33,22 @@ export default function ProductsPage() {
   const [galleries, setGalleries] = useState<Record<string, ProductGalleryImage[]>>({});
   const [galleryLoadingId, setGalleryLoadingId] = useState<string | null>(null);
   const [galleryUploadingId, setGalleryUploadingId] = useState<string | null>(null);
+
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingNameId, setSavingNameId] = useState<string | null>(null);
+
+  // "Add New Product" form
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    description: "",
+    price: "",
+    categoryId: "",
+    newCategoryName: "",
+  });
+  const [usingNewCategory, setUsingNewCategory] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState(false);
 
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -173,6 +191,85 @@ export default function ProductsPage() {
     }
   }
 
+  function startEditingName(product: AdminProduct) {
+    setEditingNameId(product.id);
+    setNameDraft(product.name);
+  }
+
+  function cancelEditingName() {
+    setEditingNameId(null);
+    setNameDraft("");
+  }
+
+  async function saveName(productId: string) {
+    if (!nameDraft.trim()) {
+      setError("Product name can't be empty.");
+      return;
+    }
+    setError("");
+    setSavingNameId(productId);
+    try {
+      await updateProductName(productId, nameDraft);
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, name: nameDraft.trim() } : p))
+      );
+      setEditingNameId(null);
+    } catch (err: any) {
+      setError(err?.message || "Failed to update the name. Please try again.");
+    } finally {
+      setSavingNameId(null);
+    }
+  }
+
+  async function handleCreateProduct() {
+    setError("");
+
+    if (!newProduct.name.trim()) {
+      setError("Enter a product name.");
+      return;
+    }
+    const price = parseFloat(newProduct.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("Enter a valid price.");
+      return;
+    }
+    if (!usingNewCategory && !newProduct.categoryId) {
+      setError("Choose a category, or add a new one.");
+      return;
+    }
+    if (usingNewCategory && !newProduct.newCategoryName.trim()) {
+      setError("Enter a name for the new category.");
+      return;
+    }
+
+    setCreatingProduct(true);
+    try {
+      let categoryId = newProduct.categoryId;
+
+      if (usingNewCategory) {
+        const created = await createCategory(newProduct.newCategoryName);
+        setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+        categoryId = created.id;
+      }
+
+      const created = await createProduct({
+        categoryId,
+        name: newProduct.name,
+        description: newProduct.description,
+        price,
+      });
+
+      setProducts((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewProduct({ name: "", description: "", price: "", categoryId: "", newCategoryName: "" });
+      setUsingNewCategory(false);
+      setShowAddForm(false);
+    } catch (err: any) {
+      setError(err?.message || "Failed to create product. Please try again.");
+    } finally {
+      setCreatingProduct(false);
+    }
+  }
+
   function triggerCategoryUpload(categoryId: string) {
     categoryInputRefs.current[categoryId]?.click();
   }
@@ -232,6 +329,104 @@ export default function ProductsPage() {
         {error && (
           <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">{error}</div>
         )}
+
+        {/* Add New Product */}
+        <div className="mb-12">
+          {!showAddForm ? (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="inline-flex items-center gap-2 bg-[var(--color-magenta)] text-white text-sm font-semibold px-5 py-3 rounded-full hover:opacity-90 transition"
+            >
+              <Plus size={16} />
+              Add New Product
+            </button>
+          ) : (
+            <div className="bg-white rounded-3xl shadow-card p-6">
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-display font-bold text-lg">Add New Product</h2>
+                <button
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setError("");
+                  }}
+                  className="text-black/40 hover:text-black"
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="Product name"
+                  value={newProduct.name}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
+                  className="px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-magenta)] sm:col-span-2"
+                />
+                <textarea
+                  placeholder="Description"
+                  value={newProduct.description}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, description: e.target.value }))}
+                  rows={2}
+                  className="px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-magenta)] sm:col-span-2"
+                />
+                <input
+                  type="number"
+                  placeholder="Price (₹)"
+                  value={newProduct.price}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, price: e.target.value }))}
+                  className="px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-magenta)]"
+                />
+
+                {!usingNewCategory ? (
+                  <select
+                    value={newProduct.categoryId}
+                    onChange={(e) => setNewProduct((p) => ({ ...p, categoryId: e.target.value }))}
+                    className="px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-magenta)] bg-white"
+                  >
+                    <option value="">Choose category...</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="New category name"
+                    value={newProduct.newCategoryName}
+                    onChange={(e) =>
+                      setNewProduct((p) => ({ ...p, newCategoryName: e.target.value }))
+                    }
+                    className="px-4 py-3 rounded-xl border border-black/10 focus:outline-none focus:ring-2 focus:ring-[var(--color-magenta)]"
+                  />
+                )}
+              </div>
+
+              <button
+                onClick={() => setUsingNewCategory((v) => !v)}
+                className="text-xs font-semibold text-[var(--color-magenta)] mt-3"
+              >
+                {usingNewCategory ? "← Choose an existing category instead" : "+ Add a new category instead"}
+              </button>
+
+              <p className="text-black/40 text-xs mt-4">
+                You can upload a photo for it right after creating — it'll appear on the main
+                site immediately, and in Inventory too if it's under Cake Cans.
+              </p>
+
+              <button
+                onClick={handleCreateProduct}
+                disabled={creatingProduct}
+                className="w-full mt-5 bg-black text-white font-semibold py-3 rounded-full hover:bg-black/80 transition disabled:opacity-50"
+              >
+                {creatingProduct ? "Creating..." : "Create Product"}
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Category cover photos */}
         <div className="mb-12">
@@ -329,7 +524,39 @@ export default function ProductsPage() {
                       </div>
 
                       <div className="p-4">
-                        <h3 className="font-bold text-black text-sm mb-1 truncate">{product.name}</h3>
+                        {editingNameId === product.id ? (
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <input
+                              type="text"
+                              value={nameDraft}
+                              onChange={(e) => setNameDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveName(product.id);
+                                if (e.key === "Escape") cancelEditingName();
+                              }}
+                              autoFocus
+                              disabled={savingNameId === product.id}
+                              className="flex-1 min-w-0 text-sm font-bold text-black border border-black/20 rounded-lg px-2 py-1 focus:outline-none focus:border-[var(--color-magenta)]"
+                            />
+                            <button
+                              onClick={() => saveName(product.id)}
+                              disabled={savingNameId === product.id}
+                              className="text-green-600 hover:text-green-700 disabled:opacity-50"
+                              aria-label="Save name"
+                            >
+                              <Check size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startEditingName(product)}
+                            className="w-full text-left group/name"
+                          >
+                            <h3 className="font-bold text-black text-sm mb-1 truncate group-hover/name:underline decoration-dotted">
+                              {product.name}
+                            </h3>
+                          </button>
+                        )}
                         <p className="text-black/40 text-xs mb-3">₹{product.price}</p>
 
                         <input

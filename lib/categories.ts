@@ -66,3 +66,29 @@ export async function uploadCategoryImage(categoryId: string, file: File): Promi
 
   return freshUrl;
 }
+
+// Creates a new category, deriving a URL-safe slug from the name.
+// Returns the new category so the caller can immediately select it.
+export async function createCategory(name: string): Promise<AdminCategory> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Category name can't be empty.");
+  }
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  const { data, error } = await supabase
+    .from("categories")
+    .insert({ name: trimmed, slug })
+    .select("id, name, slug, image_url")
+    .single();
+
+  if (error) {
+    console.error("Error creating category:", error);
+    throw error;
+  }
+
+  return { id: data.id, name: data.name, slug: data.slug, imageUrl: data.image_url };
+}
