@@ -15,13 +15,16 @@ function getLocationCode(locationId: string): string {
 }
 
 // Maps a raw Supabase row (with joined customers + order_items) into
-// the app's Order shape.
+// the app's Order shape. Prefers the name typed at the counter for this
+// specific order (row.customer_name) over the account's registered name,
+// since staff may type a nickname/short name that's different from what
+// the customer signed up with — the account itself is never renamed.
 function mapRowToOrder(row: any): Order {
   return {
     id: row.id,
     billNo: row.bill_no || `CZT-${getLocationCode(row.location_id)}-${row.id.slice(0, 4).toUpperCase()}`,
     locationId: row.location_id,
-    customerName: row.customers?.name ?? "Walk-in",
+    customerName: row.customer_name || row.customers?.name || "Walk-in",
     customerGender: (row.customers?.gender as CustomerGender) ?? "male",
     customerAvatarId: row.customers?.avatar_id ?? null,
     items: (row.order_items ?? []).map(
@@ -81,31 +84,42 @@ async function generateUniqueBillNo(locationId: string): Promise<string> {
   return `CZT-${code}-${String(next).padStart(3, "0")}`;
 }
 
-async function findOrCreateCustomerByName(
+// Finds a customer by phone number — the same identity used for login on
+// the main site — or creates one if this number hasn't ordered before.
+// This is what lets a walk-in customer log in later with the number they
+// gave at the counter and see this order in their history/points.
+//
+// Important: this NEVER renames an existing account. If the phone is
+// already registered, we just link the order to that account as-is —
+// whatever name staff typed at the counter is stored on the order itself
+// (see addOrder), not written back onto the customer's real profile.
+async function findOrCreateCustomerByPhone(
+  phone: string,
   name: string,
   gender: CustomerGender
 ): Promise<string> {
   const { data: existing, error: findError } = await supabase
     .from("customers")
     .select("id")
-    .eq("name", name)
-    .is("phone", null)
+    .eq("phone", phone)
     .maybeSingle();
 
   if (findError) {
-    console.error("Error finding counter customer:", findError);
+    console.error("Error finding customer by phone:", findError);
   }
 
-  if (existing) return existing.id;
+  if (existing) {
+    return existing.id;
+  }
 
   const { data: created, error: createError } = await supabase
     .from("customers")
-    .insert({ name, gender })
+    .insert({ name, gender, phone })
     .select("id")
     .single();
 
   if (createError) {
-    console.error("Error creating counter customer:", createError);
+    console.error("Error creating customer:", createError);
     throw createError;
   }
 
@@ -118,12 +132,13 @@ async function findOrCreateCustomerByName(
 export async function addOrder(
   locationId: string,
   customerName: string,
+  customerPhone: string,
   customerGender: CustomerGender,
   items: OrderItem[],
   mode: Order["mode"],
   paymentMethod: PaymentMethod
 ): Promise<Order> {
-  const customerId = await findOrCreateCustomerByName(customerName, customerGender);
+  const customerId = await findOrCreateCustomerByPhone(customerPhone, customerName, customerGender);
   const billNo = await generateUniqueBillNo(locationId);
   const total = items.reduce((sum, i) => sum + i.qty * i.price, 0);
 
@@ -131,6 +146,9 @@ export async function addOrder(
     .from("orders")
     .insert({
       customer_id: customerId,
+      // Snapshot of what staff typed at the counter for this specific
+      // order — kept separate from the customer's registered name.
+      customer_name: customerName,
       status: "pending",
       total,
       location_id: locationId,
@@ -191,9 +209,10 @@ export async function updateOrderStatus(
 export async function createCounterOrder(
   locationId: string,
   customerName: string,
+  customerPhone: string,
   items: OrderItem[],
   paymentMethod: PaymentMethod = "cash",
   customerGender: CustomerGender = "male"
 ): Promise<Order> {
-  return addOrder(locationId, customerName, customerGender, items, "pickup", paymentMethod);
+  return addOrder(locationId, customerName, customerPhone, customerGender, items, "pickup", paymentMethod);
 }

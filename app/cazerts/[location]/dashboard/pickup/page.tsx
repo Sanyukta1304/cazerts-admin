@@ -67,6 +67,7 @@ export default function PickupPage() {
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [customerGender, setCustomerGender] = useState<CustomerGender>("male");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
@@ -165,6 +166,7 @@ export default function PickupPage() {
   function resetOrderForm() {
     setCart({});
     setCustomerName("");
+    setCustomerPhone("");
     setCustomerGender("male");
     setPaymentMethod("cash");
     setError("");
@@ -180,6 +182,11 @@ export default function PickupPage() {
       setError("Enter the customer's name.");
       return;
     }
+    const cleanedPhone = customerPhone.trim();
+    if (!/^\d{10}$/.test(cleanedPhone)) {
+      setError("Enter a valid 10-digit phone number.");
+      return;
+    }
     setError("");
 
     const items = cartLines.map((line) => ({
@@ -192,6 +199,7 @@ export default function PickupPage() {
     const savedOrder = await createCounterOrder(
       locationId,
       customerName.trim(),
+      cleanedPhone,
       items,
       paymentMethod,
       customerGender
@@ -459,6 +467,23 @@ export default function PickupPage() {
                     placeholder="Customer name"
                     className="w-full px-4 py-2.5 rounded-xl border border-black/10 text-sm focus:outline-none focus:border-black/30"
                   />
+
+                  <div>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={customerPhone}
+                      onChange={(e) =>
+                        setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+                      }
+                      placeholder="Phone number"
+                      className="w-full px-4 py-2.5 rounded-xl border border-black/10 text-sm focus:outline-none focus:border-black/30"
+                    />
+                    <p className="text-black/40 text-[11px] mt-1.5">
+                      They can log in with this number on the website to see this order and their
+                      points.
+                    </p>
+                  </div>
 
                   <div className="flex gap-2">
                     {(["male", "female"] as CustomerGender[]).map((g) => (
