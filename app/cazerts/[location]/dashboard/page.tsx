@@ -17,7 +17,7 @@ import {
 import { getLocationById } from "@/lib/locations";
 import { getOrders } from "@/lib/order-store";
 import { getTodaysRevenue, getLeaderboard } from "@/lib/orders";
-import { getStoreStatus } from "@/lib/store-status";
+import { getStoreStatus, setManualClosed, setManualOpen } from "@/lib/store-status";
 
 type CardDef = {
   id: string;
@@ -40,12 +40,20 @@ export default function DashboardHub() {
   const [todaysRevenue, setTodaysRevenue] = useState(0);
   const [topItem, setTopItem] = useState<string | null>(null);
   const [storeOpen, setStoreOpen] = useState<boolean | null>(null);
+  const [togglingStore, setTogglingStore] = useState(false);
 
   useEffect(() => {
-    getStoreStatus(locationId)
-      .then((s) => setStoreOpen(s.isOpen))
-      .catch(() => setStoreOpen(null));
+    refreshStoreStatus();
   }, [locationId]);
+
+  async function refreshStoreStatus() {
+    try {
+      const s = await getStoreStatus(locationId);
+      setStoreOpen(s.isOpen);
+    } catch {
+      setStoreOpen(null);
+    }
+  }
 
   useEffect(() => {
     async function loadStats() {
@@ -59,6 +67,25 @@ export default function DashboardHub() {
     }
     loadStats();
   }, [locationId]);
+
+  async function handleToggleStore() {
+    if (storeOpen === null || togglingStore) return;
+    setTogglingStore(true);
+    try {
+      if (storeOpen) {
+        // currently open -> close it for the rest of today
+        await setManualClosed(locationId, true);
+      } else {
+        // currently closed -> force it open for the rest of today
+        await setManualOpen(locationId, true);
+      }
+      await refreshStoreStatus();
+    } catch (err) {
+      console.error("Error toggling store status:", err);
+    } finally {
+      setTogglingStore(false);
+    }
+  }
 
   const pages: CardDef[][] = [
     [
@@ -78,17 +105,6 @@ export default function DashboardHub() {
         href: `/cazerts/${locationId}/dashboard/pickup`,
         icon: ShoppingBag,
         bg: "bg-black",
-        count: 0,
-        isStat: true,
-      },
-      {
-        id: "store-status",
-        title: "Store Status",
-        subtitle:
-          storeOpen === null ? "Checking..." : storeOpen ? "Open now" : "Closed now",
-        href: `/cazerts/${locationId}/dashboard/store-status`,
-        icon: Power,
-        bg: storeOpen ? "bg-green-600" : "bg-red-500",
         count: 0,
         isStat: true,
       },
@@ -117,10 +133,10 @@ export default function DashboardHub() {
     ],
     [
       {
-        id: "products",
-        title: "Products",
+        id: "photos",
+        title: "Photos",
         subtitle: "Manage photos",
-        href: `/cazerts/${locationId}/dashboard/products`,
+        href: `/cazerts/${locationId}/dashboard/photos`,
         icon: ImageIcon,
         bg: "bg-indigo-600",
         count: 0,
@@ -172,9 +188,25 @@ export default function DashboardHub() {
               <p className="text-[var(--color-magenta)] text-xs font-bold tracking-[0.2em] uppercase mb-2 text-center">
                 CAZERTS Admin
               </p>
-              <h1 className="font-display font-extrabold text-3xl md:text-4xl mb-10 text-center">
-                {location ? location.name : "Dashboard"}
-              </h1>
+              <div className="flex items-center justify-center gap-3 mb-10">
+                <h1 className="font-display font-extrabold text-3xl md:text-4xl text-center">
+                  {location ? location.name : "Dashboard"}
+                </h1>
+                <button
+                  onClick={handleToggleStore}
+                  disabled={storeOpen === null || togglingStore}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold shadow-card transition disabled:opacity-50 ${
+                    storeOpen ? "bg-green-600 text-white" : "bg-red-500 text-white"
+                  }`}
+                >
+                  <Power size={14} />
+                  {storeOpen === null
+                    ? "Checking..."
+                    : storeOpen
+                    ? "Open now"
+                    : "Closed now"}
+                </button>
+              </div>
             </>
           )}
 

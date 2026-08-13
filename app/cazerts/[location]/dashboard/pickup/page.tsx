@@ -15,12 +15,13 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { getLocationById } from "@/lib/locations";
-import { categories, products, Product } from "@/lib/menu-items";
+import { getAdminProducts, AdminProduct } from "@/lib/products";
+import { getAdminCategories, AdminCategory } from "@/lib/categories";
 import { createCounterOrder } from "@/lib/order-store";
-import { getTrackedInventory } from "@/lib/inventory";
+import { getStockForProducts, decrementStock } from "@/lib/inventory";
 import { Order, PaymentMethod, CustomerGender, orderTotal } from "@/lib/orders";
 
-type CartLine = { product: Product; qty: number };
+type CartLine = { product: AdminProduct; qty: number };
 
 function InstagramGlyph() {
   return (
@@ -58,40 +59,81 @@ export default function PickupPage() {
   const locationId = params.location as string;
   const location = getLocationById(locationId);
 
-  const [activeCategory, setActiveCategory] = useState<string>(categories[0]?.name ?? "");
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [menuError, setMenuError] = useState("");
+
+  const [activeCategory, setActiveCategory] = useState<string>("");
   const [cart, setCart] = useState<Record<string, CartLine>>({});
   const [customerName, setCustomerName] = useState("");
   const [customerGender, setCustomerGender] = useState<CustomerGender>("male");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [error, setError] = useState("");
-  const [outOfStockNames, setOutOfStockNames] = useState<Set<string>>(new Set());
+  const [stockWarning, setStockWarning] = useState("");
+  // productId -> stock. null = untracked/unlimited. Not present in the
+  // map yet = still loading.
+  const [stockMap, setStockMap] = useState<Map<string, number | null>>(new Map());
 
+  // Load the live product catalog and categories from Supabase — same data
+  // the main site and the admin Products page use, so anything added there
+  // (like a new Cake Can flavour) shows up here too.
   useEffect(() => {
-    // Cross-referenced by product name, since this static menu list uses
-    // its own local IDs rather than the real Supabase product IDs that
-    // the inventory table is keyed on.
-    getTrackedInventory()
-      .then((items) => {
-        const outOfStock = new Set(items.filter((i) => !i.inStock).map((i) => i.name));
-        setOutOfStockNames(outOfStock);
-      })
-      .catch(() => {
-        // Non-critical — if this fails, we just won't show stock badges.
-      });
+    async function loadMenu() {
+      setMenuLoading(true);
+      try {
+        const [cats, prods] = await Promise.all([getAdminCategories(), getAdminProducts()]);
+        setCategories(cats);
+        setProducts(prods);
+        setActiveCategory((prev) => prev || cats[0]?.name || "");
+      } catch {
+        setMenuError("Couldn't load the menu. Try refreshing.");
+      } finally {
+        setMenuLoading(false);
+      }
+    }
+    loadMenu();
   }, []);
 
+  // Once products are loaded, fetch live stock for all of them — covers
+  // every category now, not just Cake Cans.
+  useEffect(() => {
+    if (products.length === 0) return;
+    getStockForProducts(products.map((p) => p.id))
+      .then(setStockMap)
+      .catch(() => {
+        // Non-critical — if this fails, we just won't show stock limits.
+      });
+  }, [products]);
+
   const visibleProducts = useMemo(
-    () => products.filter((p) => p.category === activeCategory),
-    [activeCategory]
+    () => products.filter((p) => p.categoryName === activeCategory),
+    [products, activeCategory]
   );
 
   const cartLines = Object.values(cart);
   const cartTotal = cartLines.reduce((sum, line) => sum + line.product.price * line.qty, 0);
   const cartCount = cartLines.reduce((sum, line) => sum + line.qty, 0);
 
-  function addToCart(product: Product) {
-    if (outOfStockNames.has(product.name)) return;
+  function stockFor(productId: string): number | null {
+    return stockMap.has(productId) ? stockMap.get(productId)! : null;
+  }
+
+  function addToCart(product: AdminProduct) {
+    const stock = stockFor(product.id);
+    const existingQty = cart[product.id]?.qty ?? 0;
+
+    if (stock !== null && existingQty + 1 > stock) {
+      setStockWarning(
+        stock === 0
+          ? `${product.name} is out of stock.`
+          : `Only ${stock} left of ${product.name} — you already have ${existingQty} in the order.`
+      );
+      return;
+    }
+    setStockWarning("");
+
     setCart((prev) => {
       const existing = prev[product.id];
       return {
@@ -126,6 +168,7 @@ export default function PickupPage() {
     setCustomerGender("male");
     setPaymentMethod("cash");
     setError("");
+    setStockWarning("");
   }
 
   async function handleGenerateBill() {
@@ -141,7 +184,7 @@ export default function PickupPage() {
 
     const items = cartLines.map((line) => ({
       name: line.product.name,
-      category: line.product.category,
+      category: line.product.categoryName,
       qty: line.qty,
       price: line.product.price,
     }));
@@ -154,6 +197,19 @@ export default function PickupPage() {
       customerGender
     );
     setLastOrder(savedOrder);
+
+    // Reduce stock for every tracked item in this order — keeps the
+    // main site and admin Inventory page in sync automatically.
+    for (const line of cartLines) {
+      if (stockFor(line.product.id) !== null) {
+        try {
+          await decrementStock(line.product.id, line.qty);
+        } catch {
+          // Non-critical for the bill itself — inventory can be corrected
+          // manually if this fails.
+        }
+      }
+    }
   }
 
   function handlePrint() {
@@ -163,6 +219,12 @@ export default function PickupPage() {
   function handleNewOrder() {
     setLastOrder(null);
     resetOrderForm();
+    // Refresh stock since the last order may have reduced it.
+    if (products.length > 0) {
+      getStockForProducts(products.map((p) => p.id))
+        .then(setStockMap)
+        .catch(() => {});
+    }
   }
 
   const gst = lastOrder ? splitGst(orderTotal(lastOrder)) : null;
@@ -203,6 +265,24 @@ export default function PickupPage() {
             Counter Order
           </h1>
 
+          {menuError && (
+            <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
+              {menuError}
+            </div>
+          )}
+
+          {stockWarning && (
+            <div className="bg-amber-50 text-amber-700 text-sm px-4 py-3 rounded-xl mb-6 flex items-center justify-between gap-4">
+              <span>{stockWarning}</span>
+              <button
+                onClick={() => setStockWarning("")}
+                className="text-amber-700/60 hover:text-amber-700 text-xs font-bold"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {lastOrder ? (
             <div className="bg-white rounded-3xl p-10 shadow-card text-center max-w-md mx-auto">
               <div className="w-16 h-16 rounded-full bg-green-50 text-green-600 flex items-center justify-center mx-auto mb-5">
@@ -237,6 +317,8 @@ export default function PickupPage() {
                 </button>
               </div>
             </div>
+          ) : menuLoading ? (
+            <p className="text-black/40 text-sm">Loading menu...</p>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
               {/* Menu */}
@@ -244,7 +326,7 @@ export default function PickupPage() {
                 <div className="flex flex-wrap gap-2 mb-6">
                   {categories.map((cat) => (
                     <button
-                      key={cat.slug}
+                      key={cat.id}
                       onClick={() => setActiveCategory(cat.name)}
                       className={`px-4 py-2 rounded-full text-sm font-semibold transition ${
                         activeCategory === cat.name
@@ -259,7 +341,9 @@ export default function PickupPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {visibleProducts.map((product) => {
-                    const isOutOfStock = outOfStockNames.has(product.name);
+                    const stock = stockFor(product.id);
+                    const isOutOfStock = stock !== null && stock <= 0;
+                    const isLowStock = stock !== null && stock > 0 && stock <= 5;
                     return (
                       <div
                         key={product.id}
@@ -270,6 +354,11 @@ export default function PickupPage() {
                         {isOutOfStock && (
                           <span className="absolute top-3 right-3 bg-[var(--color-magenta)] text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
                             Out of Stock
+                          </span>
+                        )}
+                        {!isOutOfStock && isLowStock && (
+                          <span className="absolute top-3 right-3 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+                            {stock} left
                           </span>
                         )}
                         <h3 className="font-bold text-black mb-1">{product.name}</h3>
@@ -311,41 +400,47 @@ export default function PickupPage() {
                   <p className="text-black/40 text-sm mb-6">No items added yet.</p>
                 ) : (
                   <div className="divide-y divide-black/5 mb-4">
-                    {cartLines.map((line) => (
-                      <div key={line.product.id} className="py-3 flex items-center gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-black truncate">
-                            {line.product.name}
-                          </p>
-                          <p className="text-xs text-black/40">
-                            ₹{line.product.price} × {line.qty}
-                          </p>
+                    {cartLines.map((line) => {
+                      const stock = stockFor(line.product.id);
+                      const atMax = stock !== null && line.qty >= stock;
+                      return (
+                        <div key={line.product.id} className="py-3 flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-black truncate">
+                              {line.product.name}
+                            </p>
+                            <p className="text-xs text-black/40">
+                              ₹{line.product.price} × {line.qty}
+                              {stock !== null ? ` · ${stock} in stock` : ""}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => decrementFromCart(line.product.id)}
+                              className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <span className="text-sm font-semibold w-4 text-center">
+                              {line.qty}
+                            </span>
+                            <button
+                              onClick={() => addToCart(line.product)}
+                              disabled={atMax}
+                              className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 disabled:opacity-30"
+                            >
+                              <Plus size={12} />
+                            </button>
+                            <button
+                              onClick={() => removeFromCart(line.product.id)}
+                              className="w-7 h-7 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 ml-1"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => decrementFromCart(line.product.id)}
-                            className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10"
-                          >
-                            <Minus size={12} />
-                          </button>
-                          <span className="text-sm font-semibold w-4 text-center">
-                            {line.qty}
-                          </span>
-                          <button
-                            onClick={() => addToCart(line.product)}
-                            className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10"
-                          >
-                            <Plus size={12} />
-                          </button>
-                          <button
-                            onClick={() => removeFromCart(line.product.id)}
-                            className="w-7 h-7 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 ml-1"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

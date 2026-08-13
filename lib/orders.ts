@@ -188,6 +188,23 @@ export function getThisMonthsOrders(orders: Order[]): Order[] {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
+// Matches an order's createdAt against any specific calendar date —
+// used by the sales calendar to show orders for a picked day.
+export function isSameDate(dateStr: string, target: Date): boolean {
+  const d = new Date(dateStr);
+  return (
+    d.getFullYear() === target.getFullYear() &&
+    d.getMonth() === target.getMonth() &&
+    d.getDate() === target.getDate()
+  );
+}
+
+export function getOrdersForDate(orders: Order[], target: Date): Order[] {
+  return orders
+    .filter((o) => isSameDate(o.createdAt, target))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
 export type LeaderboardEntry = {
   name: string;
   qty: number;

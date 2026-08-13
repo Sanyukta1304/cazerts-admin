@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Wallet, Smartphone, CreditCard, IndianRupee } from "lucide-react";
+import {
+  ArrowLeft,
+  Wallet,
+  Smartphone,
+  CreditCard,
+  IndianRupee,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import {
   PieChart,
   Pie,
@@ -14,7 +24,15 @@ import {
 } from "recharts";
 import { getLocationById } from "@/lib/locations";
 import { getOrders } from "@/lib/order-store";
-import { getTodaysOrders, getThisMonthsOrders, orderTotal, Order, PaymentMethod, OrderMode } from "@/lib/orders";
+import {
+  getTodaysOrders,
+  getThisMonthsOrders,
+  getOrdersForDate,
+  orderTotal,
+  Order,
+  PaymentMethod,
+  OrderMode,
+} from "@/lib/orders";
 
 const paymentIcon: Record<PaymentMethod, React.ElementType> = {
   cash: Wallet,
@@ -66,7 +84,11 @@ const CATEGORY_COLORS = [
 ];
 
 type ChartDatum = { name: string; value: number; color: string };
-type RangeMode = "today" | "month";
+type RangeMode = "today" | "month" | "date";
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
 
 export default function SalesHistoryPage() {
   const params = useParams();
@@ -75,6 +97,9 @@ export default function SalesHistoryPage() {
 
   const [range, setRange] = useState<RangeMode>("today");
   const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [viewMonth, setViewMonth] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   useEffect(() => {
     async function loadSales() {
@@ -84,10 +109,26 @@ export default function SalesHistoryPage() {
     loadSales();
   }, [locationId]);
 
-  const displayedOrders = useMemo(
-    () => (range === "today" ? getTodaysOrders(allOrders) : getThisMonthsOrders(allOrders)),
-    [allOrders, range]
-  );
+  const displayedOrders = useMemo(() => {
+    if (range === "today") return getTodaysOrders(allOrders);
+    if (range === "month") return getThisMonthsOrders(allOrders);
+    if (range === "date" && selectedDate) return getOrdersForDate(allOrders, selectedDate);
+    return [];
+  }, [allOrders, range, selectedDate]);
+
+  // Revenue per day within the month currently shown in the calendar popover,
+  // used to mark which days had sales.
+  const revenueByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const order of allOrders) {
+      const d = new Date(order.createdAt);
+      if (d.getFullYear() === viewMonth.getFullYear() && d.getMonth() === viewMonth.getMonth()) {
+        const key = dateKey(d);
+        map.set(key, (map.get(key) ?? 0) + orderTotal(order));
+      }
+    }
+    return map;
+  }, [allOrders, viewMonth]);
 
   const totalRevenue = displayedOrders.reduce((sum, o) => sum + orderTotal(o), 0);
   const avgOrderValue = displayedOrders.length > 0 ? totalRevenue / displayedOrders.length : 0;
@@ -129,8 +170,50 @@ export default function SalesHistoryPage() {
       }));
   }, [displayedOrders]);
 
-  const heading = range === "today" ? "Today's Sales" : "This Month's Sales";
-  const bannerLabel = range === "today" ? "Total Revenue Received Today" : "Total Revenue This Month";
+  const heading =
+    range === "today"
+      ? "Today's Sales"
+      : range === "month"
+      ? "This Month's Sales"
+      : selectedDate
+      ? `Sales on ${selectedDate.toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}`
+      : "Sales";
+
+  const bannerLabel =
+    range === "today"
+      ? "Total Revenue Received Today"
+      : range === "month"
+      ? "Total Revenue This Month"
+      : "Total Revenue on This Day";
+
+  // ---- Calendar grid helpers ----
+  const monthLabel = viewMonth.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const firstOfMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+  const startOffset = firstOfMonth.getDay(); // 0=Sun
+  const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
+
+  const calendarCells: (Date | null)[] = [
+    ...Array.from({ length: startOffset }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(viewMonth.getFullYear(), viewMonth.getMonth(), i + 1)),
+  ];
+
+  const today = new Date();
+
+  function goToPrevMonth() {
+    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1));
+  }
+  function goToNextMonth() {
+    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1));
+  }
+  function pickDate(d: Date) {
+    setSelectedDate(d);
+    setRange("date");
+    setCalendarOpen(false);
+  }
 
   return (
     <main className="min-h-screen bg-[var(--color-cream)] px-5 py-14 md:px-12">
@@ -150,20 +233,135 @@ export default function SalesHistoryPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
           <h1 className="font-display font-extrabold text-3xl md:text-4xl">{heading}</h1>
 
-          <div className="inline-flex bg-white rounded-full p-1 shadow-card gap-1">
-            {(["today", "month"] as RangeMode[]).map((r) => (
+          <div className="flex items-center gap-2">
+            <div className="inline-flex bg-white rounded-full p-1 shadow-card gap-1">
+              {(["today", "month"] as RangeMode[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => {
+                    setRange(r);
+                    setSelectedDate(null);
+                  }}
+                  className={`px-4 py-2 rounded-full text-xs font-bold capitalize transition ${
+                    range === r
+                      ? "bg-[var(--color-magenta)] text-white"
+                      : "text-black/50 hover:text-black"
+                  }`}
+                >
+                  {r === "today" ? "Today" : "This Month"}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
               <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-4 py-2 rounded-full text-xs font-bold capitalize transition ${
-                  range === r
+                onClick={() => setCalendarOpen((v) => !v)}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold shadow-card transition ${
+                  range === "date"
                     ? "bg-[var(--color-magenta)] text-white"
-                    : "text-black/50 hover:text-black"
+                    : "bg-white text-black/50 hover:text-black"
                 }`}
               >
-                {r === "today" ? "Today" : "This Month"}
+                <CalendarIcon size={14} />
+                {range === "date" && selectedDate
+                  ? selectedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+                  : "Pick a day"}
               </button>
-            ))}
+
+              {calendarOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-card overflow-hidden z-20">
+                  {/* Red header bar, like a classic wall calendar */}
+                  <div className="bg-red-600 px-5 py-4 flex items-center justify-between">
+                    <button
+                      onClick={goToPrevMonth}
+                      className="p-1 rounded-full hover:bg-white/20 text-white"
+                      aria-label="Previous month"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <div className="text-center">
+                      <p className="text-white font-display font-extrabold text-lg tracking-wide">
+                        {monthLabel.split(" ")[0]}
+                      </p>
+                      <p className="text-white/80 text-xs font-semibold">{monthLabel.split(" ")[1]}</p>
+                    </div>
+                    <button
+                      onClick={goToNextMonth}
+                      className="p-1 rounded-full hover:bg-white/20 text-white"
+                      aria-label="Next month"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+
+                  <div className="p-4">
+                    <div className="grid grid-cols-7 mb-1">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
+                        <div
+                          key={i}
+                          className={`text-[10px] text-center font-bold uppercase py-1 ${
+                            i === 0 || i === 6 ? "text-red-600" : "text-black/50"
+                          }`}
+                        >
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-7 border-l border-t border-black/10">
+                      {calendarCells.map((d, i) => {
+                        const col = i % 7;
+                        const isWeekend = col === 0 || col === 6;
+                        if (!d) {
+                          return (
+                            <div
+                              key={i}
+                              className="h-10 border-r border-b border-black/10 bg-black/[0.02]"
+                            />
+                          );
+                        }
+                        const key = dateKey(d);
+                        const hasSales = revenueByDay.has(key);
+                        const isToday = key === dateKey(today);
+                        const isSelected = selectedDate ? key === dateKey(selectedDate) : false;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => pickDate(d)}
+                            className={`relative h-10 border-r border-b border-black/10 text-xs font-bold flex items-center justify-center transition ${
+                              isSelected
+                                ? "bg-red-600 text-white"
+                                : isToday
+                                ? "bg-red-50"
+                                : "hover:bg-black/5"
+                            } ${!isSelected && isWeekend ? "text-red-600" : !isSelected ? "text-black/80" : ""}`}
+                          >
+                            {d.getDate()}
+                            {hasSales && !isSelected && (
+                              <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[var(--color-gold)]" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedDate && (
+                      <button
+                        onClick={() => {
+                          setSelectedDate(null);
+                          setRange("today");
+                          setCalendarOpen(false);
+                        }}
+                        className="mt-4 w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-black/40 hover:text-black py-2"
+                      >
+                        <X size={12} />
+                        Clear selected day
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -305,7 +503,11 @@ export default function SalesHistoryPage() {
         {displayedOrders.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 text-center shadow-card">
             <p className="text-black/50">
-              {range === "today" ? "No orders placed today yet." : "No orders placed this month yet."}
+              {range === "today"
+                ? "No orders placed today yet."
+                : range === "month"
+                ? "No orders placed this month yet."
+                : "No orders placed on this day."}
             </p>
           </div>
         ) : (
