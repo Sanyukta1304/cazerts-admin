@@ -9,6 +9,7 @@ import {
   uploadProductImage,
   updateProductName,
   createProduct,
+  deleteProduct,
   getProductGallery,
   addProductGalleryImage,
   deleteProductGalleryImage,
@@ -37,6 +38,10 @@ export default function ProductsPage() {
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [savingNameId, setSavingNameId] = useState<string | null>(null);
+
+  // Delete confirm: null = not confirming, else the id of the product pending confirmation
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // "Add New Product" form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -218,6 +223,35 @@ export default function ProductsPage() {
       setError(err?.message || "Failed to update the name. Please try again.");
     } finally {
       setSavingNameId(null);
+    }
+  }
+
+  function askDeleteProduct(productId: string) {
+    setError("");
+    setConfirmDeleteId(productId);
+  }
+
+  function cancelDeleteProduct() {
+    setConfirmDeleteId(null);
+  }
+
+  async function confirmDeleteProduct(productId: string) {
+    setError("");
+    setDeletingId(productId);
+    try {
+      await deleteProduct(productId);
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+      setGalleries((prev) => {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      });
+      if (expandedId === productId) setExpandedId(null);
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete product. Please try again.");
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -491,9 +525,11 @@ export default function ProductsPage() {
                 {items.map((product) => {
                   const gallery = galleries[product.id] ?? [];
                   const isExpanded = expandedId === product.id;
+                  const isConfirmingDelete = confirmDeleteId === product.id;
+                  const isDeleting = deletingId === product.id;
 
                   return (
-                    <div key={product.id} className="bg-white rounded-3xl overflow-hidden shadow-card">
+                    <div key={product.id} className="bg-white rounded-3xl overflow-hidden shadow-card relative">
                       <div className="relative aspect-[4/3] bg-black/5">
                         {product.imageUrl && !brokenImageIds.has(product.id) ? (
                           <img
@@ -521,7 +557,47 @@ export default function ProductsPage() {
                             <Check size={14} />
                           </div>
                         )}
+
+                        {/* Delete trigger, top-left of the photo */}
+                        <button
+                          onClick={() => askDeleteProduct(product.id)}
+                          disabled={isDeleting}
+                          className="absolute top-3 left-3 bg-white/90 text-red-600 rounded-full p-1.5 hover:bg-white transition disabled:opacity-50"
+                          aria-label={`Delete ${product.name}`}
+                        >
+                          {isDeleting ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </button>
                       </div>
+
+                      {/* Confirm delete overlay */}
+                      {isConfirmingDelete && (
+                        <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-center p-5 z-10">
+                          <p className="font-bold text-sm mb-1">Delete "{product.name}"?</p>
+                          <p className="text-black/50 text-xs mb-4">
+                            This removes the product and its photos. This can't be undone.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={cancelDeleteProduct}
+                              disabled={isDeleting}
+                              className="px-4 py-2 rounded-full text-xs font-semibold bg-black/5 hover:bg-black/10 transition disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => confirmDeleteProduct(product.id)}
+                              disabled={isDeleting}
+                              className="px-4 py-2 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50"
+                            >
+                              {isDeleting ? "Deleting..." : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="p-4">
                         {editingNameId === product.id ? (

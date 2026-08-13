@@ -275,3 +275,82 @@ export async function createProduct(input: {
     categoryName: (data as any).categories?.name ?? "Uncategorized",
   };
 }
+
+// Deletes a product entirely: its gallery photos (DB rows), its gallery
+// image files in storage, its main cover image file, then the product
+// row itself. Best-effort on storage cleanup — a failed storage delete
+// won't block the product row from being removed.
+export async function deleteProduct(productId: string): Promise<void> {
+  // 1. Clean up gallery: fetch image records first so we know what files to remove.
+  const { data: galleryRows } = await supabase
+    .from("product_images")
+    .select("id, image_url")
+    .eq("product_id", productId);
+
+  if (galleryRows && galleryRows.length > 0) {
+    const galleryPaths = galleryRows
+      .map((row: any) => extractStoragePath(row.image_url))
+      .filter((p): p is string => !!p);
+
+    if (galleryPaths.length > 0) {
+      const { error: storageError } = await supabase.storage.from(BUCKET).remove(galleryPaths);
+      if (storageError) {
+        console.error("Error removing gallery files from storage:", storageError);
+        // continue anyway — DB cleanup matters more than orphaned storage files
+      }
+    }
+
+    const { error: galleryDeleteError } = await supabase
+      .from("product_images")
+      .delete()
+      .eq("product_id", productId);
+
+    if (galleryDeleteError) {
+      console.error("Error deleting gallery rows:", galleryDeleteError);
+      throw galleryDeleteError;
+    }
+  }
+
+  // 2. Remove the main cover image file, if any.
+  const { data: productRow } = await supabase
+    .from("products")
+    .select("image_url")
+    .eq("id", productId)
+    .single();
+
+  const mainPath = productRow?.image_url ? extractStoragePath(productRow.image_url) : null;
+  if (mainPath) {
+    const { error: mainStorageError } = await supabase.storage.from(BUCKET).remove([mainPath]);
+    if (mainStorageError) {
+      console.error("Error removing main image from storage:", mainStorageError);
+    }
+  }
+
+  // 3. Delete the product row itself.
+  const { error: deleteError, data: deleted } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", productId)
+    .select("id");
+
+  if (deleteError) {
+    console.error("Error deleting product:", deleteError);
+    throw deleteError;
+  }
+  if (!deleted || deleted.length === 0) {
+    throw new Error(
+      "Product wasn't deleted (likely a permissions issue). Please check Supabase RLS policies on the products table."
+    );
+  }
+}
+
+// Public Supabase Storage URLs look like:
+// https://xxxx.supabase.co/storage/v1/object/public/product-images/<path>?t=123
+// This pulls out just <path> so we can pass it to storage.remove().
+function extractStoragePath(publicUrl: string): string | null {
+  const marker = `/${BUCKET}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  const afterBucket = publicUrl.slice(idx + marker.length);
+  return afterBucket.split("?")[0] || null;
+}
