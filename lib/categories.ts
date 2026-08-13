@@ -92,3 +92,68 @@ export async function createCategory(name: string): Promise<AdminCategory> {
 
   return { id: data.id, name: data.name, slug: data.slug, imageUrl: data.image_url };
 }
+
+// Deletes a category. Refuses if any products still belong to it, so you
+// don't end up with orphaned products or a foreign-key error — move or
+// delete those products first, then delete the category.
+export async function deleteCategory(categoryId: string): Promise<void> {
+  const { count, error: countError } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("category_id", categoryId);
+
+  if (countError) {
+    console.error("Error checking products in category:", countError);
+    throw countError;
+  }
+  if (count && count > 0) {
+    throw new Error(
+      `This category still has ${count} product${count === 1 ? "" : "s"} in it. Move or delete ${
+        count === 1 ? "it" : "them"
+      } first, then delete the category.`
+    );
+  }
+
+  // Best-effort cleanup of the cover image file in storage.
+  const { data: categoryRow } = await supabase
+    .from("categories")
+    .select("image_url")
+    .eq("id", categoryId)
+    .single();
+
+  const coverPath = categoryRow?.image_url ? extractStoragePath(categoryRow.image_url) : null;
+  if (coverPath) {
+    const { error: storageError } = await supabase.storage.from(BUCKET).remove([coverPath]);
+    if (storageError) {
+      console.error("Error removing category cover from storage:", storageError);
+      // continue anyway — DB cleanup matters more than an orphaned storage file
+    }
+  }
+
+  const { error: deleteError, data: deleted } = await supabase
+    .from("categories")
+    .delete()
+    .eq("id", categoryId)
+    .select("id");
+
+  if (deleteError) {
+    console.error("Error deleting category:", deleteError);
+    throw deleteError;
+  }
+  if (!deleted || deleted.length === 0) {
+    throw new Error(
+      "Category wasn't deleted (likely a permissions issue). Please check Supabase RLS policies on the categories table."
+    );
+  }
+}
+
+// Public Supabase Storage URLs look like:
+// https://xxxx.supabase.co/storage/v1/object/public/product-images/<path>?t=123
+// This pulls out just <path> so we can pass it to storage.remove().
+function extractStoragePath(publicUrl: string): string | null {
+  const marker = `/${BUCKET}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return null;
+  const afterBucket = publicUrl.slice(idx + marker.length);
+  return afterBucket.split("?")[0] || null;
+}

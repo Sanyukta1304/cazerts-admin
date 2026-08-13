@@ -17,7 +17,13 @@ import {
   ProductGalleryImage,
   MAX_GALLERY_IMAGES,
 } from "@/lib/products";
-import { getAdminCategories, uploadCategoryImage, createCategory, AdminCategory } from "@/lib/categories";
+import {
+  getAdminCategories,
+  uploadCategoryImage,
+  createCategory,
+  deleteCategory,
+  AdminCategory,
+} from "@/lib/categories";
 
 export default function ProductsPage() {
   const params = useParams();
@@ -58,6 +64,8 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoryUploadingId, setCategoryUploadingId] = useState<string | null>(null);
+  const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState<string | null>(null);
+  const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const galleryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -304,6 +312,29 @@ export default function ProductsPage() {
     }
   }
 
+  function askDeleteCategory(categoryId: string) {
+    setError("");
+    setConfirmDeleteCategoryId(categoryId);
+  }
+
+  function cancelDeleteCategory() {
+    setConfirmDeleteCategoryId(null);
+  }
+
+  async function confirmDeleteCategory(categoryId: string) {
+    setError("");
+    setDeletingCategoryId(categoryId);
+    try {
+      await deleteCategory(categoryId);
+      setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+    } catch (err: any) {
+      setError(err?.message || "Failed to delete category. Please try again.");
+    } finally {
+      setDeletingCategoryId(null);
+      setConfirmDeleteCategoryId(null);
+    }
+  }
+
   function triggerCategoryUpload(categoryId: string) {
     categoryInputRefs.current[categoryId]?.click();
   }
@@ -469,8 +500,12 @@ export default function ProductsPage() {
             <p className="text-black/40 text-sm">Loading categories...</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {categories.map((category) => (
-                <div key={category.id} className="bg-white rounded-2xl overflow-hidden shadow-card">
+              {categories.map((category) => {
+                const isConfirmingCategoryDelete = confirmDeleteCategoryId === category.id;
+                const isDeletingCategory = deletingCategoryId === category.id;
+
+                return (
+                <div key={category.id} className="bg-white rounded-2xl overflow-hidden shadow-card relative">
                   <div className="relative aspect-[3/4] bg-black/5">
                     {category.imageUrl ? (
                       <img
@@ -488,7 +523,48 @@ export default function ProductsPage() {
                         <Loader2 size={22} className="text-white animate-spin" />
                       </div>
                     )}
+
+                    {/* Delete trigger, top-left of the cover photo */}
+                    <button
+                      onClick={() => askDeleteCategory(category.id)}
+                      disabled={isDeletingCategory}
+                      className="absolute top-2 left-2 bg-white/90 text-red-600 rounded-full p-1.5 hover:bg-white transition disabled:opacity-50"
+                      aria-label={`Delete ${category.name}`}
+                    >
+                      {isDeletingCategory ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={13} />
+                      )}
+                    </button>
                   </div>
+
+                  {/* Confirm delete overlay */}
+                  {isConfirmingCategoryDelete && (
+                    <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-center p-3 z-10">
+                      <p className="font-bold text-xs mb-1">Delete "{category.name}"?</p>
+                      <p className="text-black/50 text-[10px] mb-3">
+                        Only works if it has no products left in it.
+                      </p>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={cancelDeleteCategory}
+                          disabled={isDeletingCategory}
+                          className="px-3 py-1.5 rounded-full text-[10px] font-semibold bg-black/5 hover:bg-black/10 transition disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => confirmDeleteCategory(category.id)}
+                          disabled={isDeletingCategory}
+                          className="px-3 py-1.5 rounded-full text-[10px] font-semibold bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50"
+                        >
+                          {isDeletingCategory ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="p-3">
                     <p className="font-bold text-black text-xs mb-2 truncate">{category.name}</p>
                     <input
@@ -510,7 +586,8 @@ export default function ProductsPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
