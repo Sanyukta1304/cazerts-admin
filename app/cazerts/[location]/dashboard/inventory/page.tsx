@@ -84,12 +84,17 @@ export default function InventoryPage() {
       [item.productId]: quantity === null ? "" : String(quantity),
     }));
 
-    try {
-      await setProductStock(item.productId, quantity);
-    } catch {
-      setError(`Failed to update ${item.name}. Please try again.`);
-      await load();
-    } finally {
+   try {
+  if (quantity === null) {
+    setError(`Please enter a valid quantity for ${item.name}.`);
+    return;
+  }
+
+  await setProductStock(item.productId, quantity);
+} catch {
+  setError(`Failed to update ${item.name}. Please try again.`);
+  await load();
+}finally {
       setUpdatingId(null);
     }
   }
