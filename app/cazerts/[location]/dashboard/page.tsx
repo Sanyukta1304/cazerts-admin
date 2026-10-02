@@ -1,253 +1,256 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
-  Radio,
-  ShoppingBag,
-  TrendingUp,
-  Trophy,
-  ImageIcon,
-  MessageSquare,
-  PackageX,
-  Power,
+  ArrowRight,
+  BarChart3,
+  Boxes,
+  Camera,
+  ChevronRight,
+  CircleCheck,
+  CircleX,
+  MapPin,
+  Package,
+  Store,
+  Users,
 } from "lucide-react";
-import { getLocationById } from "@/lib/locations";
-import { getOrders } from "@/lib/order-store";
-import { getTodaysRevenue, getLeaderboard } from "@/lib/orders";
-import { getStoreStatus, setManualClosed, setManualOpen } from "@/lib/store-status";
 
-type CardDef = {
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  icon: React.ElementType;
-  bg: string;
-  count: number;
-  isStat?: boolean;
-};
+const QUICK_LINKS = [
+  {
+    label: "Sales",
+    description: "View sales",
+    slug: "sales",
+    icon: BarChart3,
+  },
+  {
+    label: "Inventory",
+    description: "Manage stock",
+    slug: "inventory",
+    icon: Boxes,
+  },
+  {
+    label: "Pickup",
+    description: "Manage pickups",
+    slug: "pickup",
+    icon: Package,
+  },
+  {
+    label: "Live tracking",
+    description: "Track deliveries",
+    slug: "live-tracking",
+    icon: MapPin,
+  },
+  {
+    label: "Photos",
+    description: "Store photos",
+    slug: "photos",
+    icon: Camera,
+  },
+  {
+    label: "Team",
+    description: "Manage team",
+    slug: "team",
+    icon: Users,
+  },
+];
 
-export default function DashboardHub() {
-  const params = useParams();
-  const locationId = params.location as string;
-  const location = getLocationById(locationId);
+export default function DashboardPage() {
+  const params = useParams<{ location: string }>();
 
-  const [pendingDelivery, setPendingDelivery] = useState(0);
-  const [pendingPickup, setPendingPickup] = useState(0);
-  const [todaysRevenue, setTodaysRevenue] = useState(0);
-  const [topItem, setTopItem] = useState<string | null>(null);
-  const [storeOpen, setStoreOpen] = useState<boolean | null>(null);
-  const [togglingStore, setTogglingStore] = useState(false);
+  const location = decodeURIComponent(params.location ?? "").replace(
+    /-/g,
+    " "
+  );
 
+  const locationName = location
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+  const base = `/cazerts/${params.location}/dashboard`;
+
+  const [storeOpen, setStoreOpen] = useState(true);
+
+  // Keep the store status after refreshing the page.
   useEffect(() => {
-    refreshStoreStatus();
-  }, [locationId]);
+    const savedStatus = localStorage.getItem(
+      `cazerts-store-status-${params.location}`
+    );
 
-  async function refreshStoreStatus() {
-    try {
-      const s = await getStoreStatus(locationId);
-      setStoreOpen(s.isOpen);
-    } catch {
-      setStoreOpen(null);
+    if (savedStatus !== null) {
+      setStoreOpen(savedStatus === "open");
     }
+  }, [params.location]);
+
+  function toggleStore() {
+    const nextStatus = !storeOpen;
+
+    setStoreOpen(nextStatus);
+
+    localStorage.setItem(
+      `cazerts-store-status-${params.location}`,
+      nextStatus ? "open" : "closed"
+    );
   }
-
-  useEffect(() => {
-    async function loadStats() {
-      const orders = await getOrders(locationId);
-      setPendingDelivery(orders.filter((o) => o.status === "pending" && o.mode !== "pickup").length);
-      setPendingPickup(orders.filter((o) => o.status === "pending" && o.mode === "pickup").length);
-      setTodaysRevenue(getTodaysRevenue(orders));
-
-      const leaderboard = getLeaderboard(orders);
-      setTopItem(leaderboard.length > 0 ? leaderboard[0].name : null);
-    }
-    loadStats();
-  }, [locationId]);
-
-  async function handleToggleStore() {
-    if (storeOpen === null || togglingStore) return;
-    setTogglingStore(true);
-    try {
-      if (storeOpen) {
-        // currently open -> close it for the rest of today
-        await setManualClosed(locationId, true);
-      } else {
-        // currently closed -> force it open for the rest of today
-        await setManualOpen(locationId, true);
-      }
-      await refreshStoreStatus();
-    } catch (err) {
-      console.error("Error toggling store status:", err);
-    } finally {
-      setTogglingStore(false);
-    }
-  }
-
-  const pages: CardDef[][] = [
-    [
-      {
-        id: "live-tracking",
-        title: "Live Tracking",
-        subtitle: "Dine-in & delivery orders",
-        href: `/cazerts/${locationId}/dashboard/live-tracking`,
-        icon: Radio,
-        bg: "bg-[var(--color-magenta)]",
-        count: pendingDelivery + pendingPickup,
-      },
-      {
-        id: "pickup",
-        title: "Pickup",
-        subtitle: "Walk-in counter orders",
-        href: `/cazerts/${locationId}/dashboard/pickup`,
-        icon: ShoppingBag,
-        bg: "bg-black",
-        count: 0,
-        isStat: true,
-      },
-    ],
-    [
-      {
-        id: "sales",
-        title: "Today's Sales",
-        subtitle: `₹${todaysRevenue.toLocaleString("en-IN")} so far`,
-        href: `/cazerts/${locationId}/dashboard/sales`,
-        icon: TrendingUp,
-        bg: "bg-[var(--color-gold)]",
-        count: 0,
-        isStat: true,
-      },
-      {
-        id: "leaderboard",
-        title: "Leaderboard",
-        subtitle: topItem ? `Top: ${topItem}` : "No sales yet",
-        href: `/cazerts/${locationId}/dashboard/leaderboard`,
-        icon: Trophy,
-        bg: "bg-emerald-600",
-        count: 0,
-        isStat: true,
-      },
-    ],
-    [
-      {
-        id: "photos",
-        title: "Photos",
-        subtitle: "Manage photos",
-        href: `/cazerts/${locationId}/dashboard/photos`,
-        icon: ImageIcon,
-        bg: "bg-indigo-600",
-        count: 0,
-        isStat: true,
-      },
-      {
-        id: "feedback",
-        title: "Feedback",
-        subtitle: "Reviews & newsletter",
-        href: `/cazerts/${locationId}/dashboard/feedback`,
-        icon: MessageSquare,
-        bg: "bg-rose-600",
-        count: 0,
-        isStat: true,
-      },
-      {
-        id: "inventory",
-        title: "Inventory",
-        subtitle: "Cake can stock",
-        href: `/cazerts/${locationId}/dashboard/inventory`,
-        icon: PackageX,
-        bg: "bg-orange-600",
-        count: 0,
-        isStat: true,
-      },
-    ],
-  ];
 
   return (
     <main className="min-h-screen bg-[var(--color-cream)]">
-      <div className="max-w-5xl mx-auto px-5">
-        <div className="pt-10 pb-2">
-          <Link href="/cazerts" className="text-sm text-black/40 hover:text-black">
-            ← Switch location
-          </Link>
-        </div>
-      </div>
-
-      {/* Each group of cards is its own full-screen section, like the
-          Hero/Categories/Collections sections on the main site — scroll
-          down normally and the next set of cards fills the screen. */}
-      {pages.map((cards, pageIdx) => (
-        <section
-          key={pageIdx}
-          className="min-h-screen flex flex-col items-center justify-center px-5 py-16"
+      {/* Top bar */}
+      <header className="flex items-center justify-between px-8 pt-7 md:px-12">
+        <Link
+          href="/cazerts"
+          className="group flex items-center gap-2 text-sm text-black/45 transition-colors hover:text-black"
         >
-          {pageIdx === 0 && (
-            <>
-              <p className="text-[var(--color-magenta)] text-xs font-bold tracking-[0.2em] uppercase mb-2 text-center">
-                CAZERTS Admin
-              </p>
-              <div className="flex items-center justify-center gap-3 mb-10">
-                <h1 className="font-display font-extrabold text-3xl md:text-4xl text-center">
-                  {location ? location.name : "Dashboard"}
-                </h1>
-                <button
-                  onClick={handleToggleStore}
-                  disabled={storeOpen === null || togglingStore}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold shadow-card transition disabled:opacity-50 ${
-                    storeOpen ? "bg-green-600 text-white" : "bg-red-500 text-white"
-                  }`}
-                >
-                  <Power size={14} />
-                  {storeOpen === null
-                    ? "Checking..."
-                    : storeOpen
-                    ? "Open now"
-                    : "Closed now"}
-                </button>
-              </div>
-            </>
-          )}
+          <ChevronRight
+            size={16}
+            className="rotate-180 transition-transform group-hover:-translate-x-0.5"
+          />
+          Switch location
+        </Link>
 
-          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12">
-            {cards.map((card, i) => (
-              <motion.div
-                key={card.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                transition={{ duration: 0.4, delay: i * 0.08 }}
-              >
-                <Link
-                  href={card.href}
-                  className={`group relative flex flex-col items-center justify-center w-56 h-56 md:w-64 md:h-64 rounded-3xl ${card.bg} text-white shadow-xl hover:scale-105 transition-transform duration-300 px-4 text-center`}
-                >
-                  {!card.isStat && card.count > 0 && (
-                    <span className="absolute top-4 right-4 min-w-[28px] h-7 px-2 rounded-full bg-[var(--color-gold)] text-black text-xs font-extrabold flex items-center justify-center">
-                      {card.count}
-                    </span>
-                  )}
-                  <card.icon size={30} className="mb-4" />
-                  <span className="font-display font-extrabold text-xl">{card.title}</span>
-                  <span className="text-xs text-white/70 mt-1">{card.subtitle}</span>
-                  {!card.isStat && card.count > 0 && (
-                    <span className="text-[11px] font-semibold text-[var(--color-gold)] mt-3">
-                      {card.count} pending
-                    </span>
-                  )}
-                </Link>
-              </motion.div>
-            ))}
+        
+      </header>
+
+      {/* Content */}
+      <div className="mx-auto max-w-6xl px-8 pb-12 pt-16 md:px-12">
+        {/* Heading */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[var(--color-magenta)]">
+            Cazerts Admin
+          </p>
+
+          <div className="mt-2 flex flex-wrap items-center gap-4">
+            <h1 className="font-display text-4xl font-extrabold tracking-tight md:text-5xl">
+              {locationName}
+            </h1>
+
+            <div
+              className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                storeOpen
+                  ? "bg-green-100 text-green-700"
+                  : "bg-red-100 text-red-600"
+              }`}
+            >
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  storeOpen ? "bg-green-500" : "bg-red-500"
+                }`}
+              />
+              {storeOpen ? "Open now" : "Closed"}
+            </div>
           </div>
 
-          {pageIdx < pages.length - 1 && (
-            <p className="text-[11px] text-black/30 mt-14 tracking-wide uppercase animate-bounce">
-              Scroll for more ↓
-            </p>
-          )}
+          <p className="mt-3 text-base text-black/45">
+            Manage your store from one place.
+          </p>
+        </div>
+
+        {/* Store status */}
+        <section className="mt-10 rounded-[2rem] bg-white p-7 shadow-sm md:p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              <div
+                className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
+                  storeOpen ? "bg-green-50" : "bg-red-50"
+                }`}
+              >
+                {storeOpen ? (
+                  <CircleCheck
+                    size={25}
+                    className="text-green-600"
+                  />
+                ) : (
+                  <CircleX
+                    size={25}
+                    className="text-red-500"
+                  />
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-black/35">
+                  Store status
+                </p>
+
+                <h2 className="mt-1 font-display text-xl font-extrabold">
+                  {storeOpen ? "Your store is open" : "Your store is closed"}
+                </h2>
+
+                <p className="mt-1 text-sm text-black/45">
+                  {storeOpen
+                    ? "Customers can currently place orders."
+                    : "Customers cannot currently place orders."}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleStore}
+              className={`rounded-full px-6 py-3 text-sm font-bold text-white transition-transform hover:scale-[1.03] ${
+                storeOpen
+                  ? "bg-black"
+                  : "bg-[var(--color-magenta)]"
+              }`}
+            >
+              {storeOpen ? "Close store" : "Open store"}
+            </button>
+          </div>
         </section>
-      ))}
+
+        {/* Quick access */}
+        <section className="mt-8">
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/30">
+                Workspace
+              </p>
+
+              <h2 className="mt-1 font-display text-2xl font-extrabold">
+                Quick access
+              </h2>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {QUICK_LINKS.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.slug}
+                  href={`${base}/${item.slug}`}
+                  className="group flex items-center gap-4 rounded-2xl bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--color-cream)]">
+                    <Icon
+                      size={19}
+                      className="text-black/60 transition-colors group-hover:text-[var(--color-magenta)]"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display text-sm font-bold">
+                      {item.label}
+                    </p>
+
+                    <p className="mt-0.5 text-xs text-black/40">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  <ArrowRight
+                    size={16}
+                    className="text-black/20 transition-all group-hover:translate-x-1 group-hover:text-black/60"
+                  />
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
