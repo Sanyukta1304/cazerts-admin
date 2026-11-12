@@ -72,6 +72,32 @@ export async function setProductStock(productId: string, quantity: number): Prom
   }
 }
 
+// Adds `amount` on top of whatever is currently in stock. It reads the
+// latest stock from the database first (not from the screen), so any
+// orders placed in the meantime are counted. Returns the new total.
+// Products with no stock row yet (unlimited) start from 0.
+export async function addProductStock(productId: string, amount: number): Promise<number> {
+  const toAdd = Math.floor(amount);
+  if (!Number.isFinite(toAdd) || toAdd <= 0) {
+    throw new Error("Enter a quantity greater than 0.");
+  }
+
+  const { data, error } = await supabase
+    .from("inventory")
+    .select("stock")
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error reading stock before adding:", error);
+    throw error;
+  }
+
+  const newStock = (data?.stock ?? 0) + toAdd;
+  await setProductStock(productId, newStock);
+  return newStock;
+}
+
 // Looks up current stock for a set of product ids in one call — used
 // by the main site (product page / cart) and the admin Pickup page
 // to check availability before confirming a quantity.

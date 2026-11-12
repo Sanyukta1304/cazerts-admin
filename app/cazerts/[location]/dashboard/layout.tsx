@@ -32,30 +32,15 @@ const NAV = [
     icon: "M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z M9.5 10a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0",
   },
   {
-    label: "Store status",
-    slug: "store-status",
-    icon: "M3 9l1.5-5h15L21 9 M4 9v11h16V9 M9 20v-6h6v6",
-  },
-  {
     label: "Feedback",
     slug: "feedback",
     icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
   },
   {
-    label: "Photos",
-    slug: "photos",
-    icon: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M21 15l-5-5L5 21 M7 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 0 0-3 0",
-  },
-  {
     label: "Leaderboard",
     slug: "leaderboard",
     icon: "M6 20v-8 M12 20V4 M18 20v-5",
-  },
-  {
-    label: "Team",
-    slug: "team",
-    icon: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8a4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
-  },
+  }
 ];
 
 function Icon({ d }: { d: string }) {

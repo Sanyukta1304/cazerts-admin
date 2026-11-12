@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${poppins.variable} ${jakarta.variable} antialiased`}>
-        <span className="fixed top-4 right-5 z-[9999] font-display font-extrabold text-xl text-black tracking-tight pointer-events-none select-none">
+        <span className="absolute top-4 right-5 z-[9999] font-display font-extrabold text-xl text-black tracking-tight pointer-events-none select-none">
           RelogFoods
         </span>
         {children}

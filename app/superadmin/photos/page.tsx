@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ImagePlus, Loader2, Check, ChevronDown, ChevronUp, Trash2, Plus, X } from "lucide-react";
 import {
@@ -25,10 +24,7 @@ import {
   AdminCategory,
 } from "@/lib/categories";
 
-export default function ProductsPage() {
-  const params = useParams();
-  const locationId = params.location as string;
-
+export default function SuperAdminPhotosPage() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
@@ -376,15 +372,15 @@ export default function ProductsPage() {
     <main className="min-h-screen bg-[var(--color-cream)] px-5 py-10 md:px-12">
       <div className="max-w-5xl mx-auto">
         <Link
-          href={`/cazerts/${locationId}/dashboard`}
+          href="/superadmin/sales"
           className="inline-flex items-center gap-2 text-sm text-black/40 hover:text-black mb-6"
         >
           <ArrowLeft size={16} />
-          Back to dashboard
+          Back to sales
         </Link>
 
         <p className="text-[var(--color-magenta)] text-xs font-bold tracking-[0.2em] uppercase mb-2">
-          CAZERTS
+          CAZERTS Super Admin
         </p>
         <h1 className="font-display font-extrabold text-3xl md:text-4xl mb-2">Product Photos</h1>
         <p className="text-black/50 text-sm mb-8">
