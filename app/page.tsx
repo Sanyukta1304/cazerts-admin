@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, User, ChevronDown } from "lucide-react";
 import { LOCATIONS } from "@/lib/locations";
+import { SUPER_ADMIN, SUPER_ADMIN_FLAG } from "@/lib/superadmin";
 
-export default function CazertsLoginPage() {
+export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +20,20 @@ export default function CazertsLoginPage() {
       return;
     }
 
+    // Super admin: goes to the all-stores sales page
+    if (username === SUPER_ADMIN.username) {
+      if (password === SUPER_ADMIN.password) {
+        try {
+          sessionStorage.setItem(SUPER_ADMIN_FLAG, "1");
+        } catch {}
+        router.push("/superadmin/sales");
+      } else {
+        setError("Incorrect username or password.");
+      }
+      return;
+    }
+
+    // Store admins: go to their own store dashboard
     const location = LOCATIONS.find((loc) => loc.username === username);
 
     if (location && password === location.password) {
@@ -57,6 +72,7 @@ export default function CazertsLoginPage() {
                   {loc.username}
                 </option>
               ))}
+              <option value={SUPER_ADMIN.username}>{SUPER_ADMIN.username}</option>
             </select>
             <ChevronDown size={16} className="text-black/40 pointer-events-none" />
           </div>

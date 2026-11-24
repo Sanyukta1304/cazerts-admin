@@ -31,7 +31,7 @@ const QUICK_LINKS = [
   { label: "Inventory", description: "Manage stock", slug: "inventory", icon: Boxes },
   { label: "Pickup", description: "Manage pickups", slug: "pickup", icon: Package },
   { label: "Live tracking", description: "Track deliveries", slug: "live-tracking", icon: MapPin },
-  { label: "Photos", description: "Store photos", slug: "photos", icon: Camera },
+  
 ];
 
 const REASON_OPTIONS = [
@@ -203,7 +203,7 @@ export default function DashboardPage() {
       {/* Top bar */}
       <header className="flex items-center justify-between px-8 pt-7 md:px-12">
         <Link
-          href="/cazerts"
+          href="/"
           className="group flex items-center gap-2 text-sm text-black/45 transition-colors hover:text-black"
         >
           <ChevronRight

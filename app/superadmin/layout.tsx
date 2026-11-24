@@ -31,14 +31,14 @@ export default function SuperAdminLayout({
     } catch {
       // sessionStorage unavailable; fall through to the redirect
     }
-    router.replace("/cazerts");
+    router.replace("/");
   }, [router]);
 
   function logOut() {
     try {
       sessionStorage.removeItem(SUPER_ADMIN_FLAG);
     } catch {}
-    router.push("/cazerts");
+    router.push("/");
   }
 
   if (!allowed) return null;
