@@ -39,6 +39,8 @@ function mapRowToOrder(row: any): Order {
     paymentMethod: row.payment_method as PaymentMethod,
     status: row.status as OrderStatus,
     createdAt: row.created_at,
+    paidTotal: row.total != null ? Number(row.total) : undefined,
+    discount: Number(row.discount) || 0,
   };
 }
 

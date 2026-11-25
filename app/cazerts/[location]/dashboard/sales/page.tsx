@@ -33,19 +33,13 @@ import {
   OrderMode,
 } from "@/lib/orders";
 
-const paymentIcon: Record<
-  PaymentMethod,
-  React.ElementType
-> = {
+const paymentIcon: Record<PaymentMethod, React.ElementType> = {
   cash: Wallet,
   upi: Smartphone,
   card: CreditCard,
 };
 
-const paymentLabel: Record<
-  PaymentMethod,
-  string
-> = {
+const paymentLabel: Record<PaymentMethod, string> = {
   cash: "Cash",
   upi: "UPI",
   card: "Card",
@@ -53,10 +47,7 @@ const paymentLabel: Record<
 
 const DEFAULT_PAYMENT_METHOD: PaymentMethod = "cash";
 
-const PAYMENT_COLORS: Record<
-  PaymentMethod,
-  string
-> = {
+const PAYMENT_COLORS: Record<PaymentMethod, string> = {
   cash: "#22c55e",
   upi: "#6366f1",
   card: "#ec4899",
@@ -74,10 +65,7 @@ const MODE_COLORS: Record<OrderMode, string> = {
   delivery: "#06b6d4",
 };
 
-const MODE_BADGE_CLASSES: Record<
-  OrderMode,
-  string
-> = {
+const MODE_BADGE_CLASSES: Record<OrderMode, string> = {
   pickup: "bg-blue-50 text-blue-600",
   dinein: "bg-amber-50 text-amber-600",
   delivery: "bg-purple-50 text-purple-600",
@@ -100,111 +88,80 @@ type ChartDatum = {
   color: string;
 };
 
-type RangeMode =
-  | "today"
-  | "month"
-  | "custom";
+type RangeMode = "today" | "month" | "custom";
+
+// ---- money helpers ----
+// net = what the customer actually paid, discount = promo given,
+// gross = total revenue before the discount (net + discount)
+function netOf(o: Order): number {
+  return o.paidTotal ?? orderTotal(o);
+}
+function discountOf(o: Order): number {
+  return o.discount ?? 0;
+}
+function grossOf(o: Order): number {
+  return netOf(o) + discountOf(o);
+}
+
+const rupees = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+const minusRupees = (n: number) => (n > 0 ? `- ₹${n.toLocaleString("en-IN")}` : "₹0");
 
 function dateKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-function isSameDay(
-  a: Date | null,
-  b: Date | null
-): boolean {
+function isSameDay(a: Date | null, b: Date | null): boolean {
   if (!a || !b) return false;
-
   return dateKey(a) === dateKey(b);
 }
 
-function isBetweenDates(
-  date: Date,
-  start: Date | null,
-  end: Date | null
-): boolean {
+function isBetweenDates(date: Date, start: Date | null, end: Date | null): boolean {
   if (!start || !end) return false;
 
-  const current = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate()
-  ).getTime();
+  const current = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const startTime = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const endTime = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
 
-  const startTime = new Date(
-    start.getFullYear(),
-    start.getMonth(),
-    start.getDate()
-  ).getTime();
-
-  const endTime = new Date(
-    end.getFullYear(),
-    end.getMonth(),
-    end.getDate()
-  ).getTime();
-
-  return (
-    current > startTime &&
-    current < endTime
-  );
+  return current > startTime && current < endTime;
 }
 
-function formatDate(
-  date: Date | null
-): string {
+function formatDate(date: Date | null): string {
   if (!date) return "";
 
-  return date.toLocaleDateString(
-    "en-IN",
-    {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }
-  );
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function SalesHistoryPage() {
   const params = useParams();
 
-  const locationId =
-    params.location as string;
+  const locationId = params.location as string;
 
-  const location =
-    getLocationById(locationId);
+  const location = getLocationById(locationId);
 
-  const [range, setRange] =
-    useState<RangeMode>("today");
+  const [range, setRange] = useState<RangeMode>("today");
 
-  const [allOrders, setAllOrders] =
-    useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
 
   // Custom date range
-  const [customStartDate, setCustomStartDate] =
-    useState<Date | null>(null);
-
-  const [customEndDate, setCustomEndDate] =
-    useState<Date | null>(null);
+  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
+  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
 
   // Temporary dates while calendar is open
-  const [pendingStartDate, setPendingStartDate] =
-    useState<Date | null>(null);
+  const [pendingStartDate, setPendingStartDate] = useState<Date | null>(null);
+  const [pendingEndDate, setPendingEndDate] = useState<Date | null>(null);
 
-  const [pendingEndDate, setPendingEndDate] =
-    useState<Date | null>(null);
-
-  const [calendarOpen, setCalendarOpen] =
-    useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Left month shown in the two-month calendar
-  const [calendarMonth, setCalendarMonth] =
-    useState<Date>(new Date());
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   useEffect(() => {
     async function loadSales() {
-      const orders =
-        await getOrders(locationId);
-
+      const orders = await getOrders(locationId);
       setAllOrders(orders);
     }
 
@@ -223,11 +180,7 @@ export default function SalesHistoryPage() {
       return getThisMonthsOrders(allOrders);
     }
 
-    if (
-      range === "custom" &&
-      customStartDate &&
-      customEndDate
-    ) {
+    if (range === "custom" && customStartDate && customEndDate) {
       const start = new Date(
         customStartDate.getFullYear(),
         customStartDate.getMonth(),
@@ -248,148 +201,89 @@ export default function SalesHistoryPage() {
         999
       );
 
-      return allOrders.filter(
-        (order) => {
-          const orderDate =
-            new Date(order.createdAt);
-
-          return (
-            orderDate >= start &&
-            orderDate <= end
-          );
-        }
-      );
+      return allOrders.filter((order) => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= start && orderDate <= end;
+      });
     }
 
     return [];
-  }, [
-    allOrders,
-    range,
-    customStartDate,
-    customEndDate,
-  ]);
+  }, [allOrders, range, customStartDate, customEndDate]);
 
-  const totalRevenue =
-    displayedOrders.reduce(
-      (sum, o) =>
-        sum + orderTotal(o),
-      0
-    );
+  const grossRevenue = displayedOrders.reduce((sum, o) => sum + grossOf(o), 0);
+  const totalDiscount = displayedOrders.reduce((sum, o) => sum + discountOf(o), 0);
+  const netRevenue = displayedOrders.reduce((sum, o) => sum + netOf(o), 0);
 
   const avgOrderValue =
-    displayedOrders.length > 0
-      ? totalRevenue /
-        displayedOrders.length
-      : 0;
+    displayedOrders.length > 0 ? netRevenue / displayedOrders.length : 0;
 
   /*
-   * PAYMENT CHART
+   * PAYMENT CHART (net revenue by payment method)
    */
-  const paymentChartData =
-    useMemo<ChartDatum[]>(() => {
-      const counts: Record<
-        PaymentMethod,
-        number
-      > = {
-        cash: 0,
-        upi: 0,
-        card: 0,
-      };
+  const paymentChartData = useMemo<ChartDatum[]>(() => {
+    const counts: Record<PaymentMethod, number> = {
+      cash: 0,
+      upi: 0,
+      card: 0,
+    };
 
-      for (const order of displayedOrders) {
-        const method =
-          order.paymentMethod ??
-          DEFAULT_PAYMENT_METHOD;
+    for (const order of displayedOrders) {
+      const method = order.paymentMethod ?? DEFAULT_PAYMENT_METHOD;
+      counts[method] += netOf(order);
+    }
 
-        counts[method] +=
-          orderTotal(order);
-      }
-
-      return (
-        Object.keys(
-          counts
-        ) as PaymentMethod[]
-      )
-        .filter(
-          (k) => counts[k] > 0
-        )
-        .map((k) => ({
-          name: paymentLabel[k],
-          value: counts[k],
-          color: PAYMENT_COLORS[k],
-        }));
-    }, [displayedOrders]);
+    return (Object.keys(counts) as PaymentMethod[])
+      .filter((k) => counts[k] > 0)
+      .map((k) => ({
+        name: paymentLabel[k],
+        value: counts[k],
+        color: PAYMENT_COLORS[k],
+      }));
+  }, [displayedOrders]);
 
   /*
    * MODE CHART
    */
-  const modeChartData =
-    useMemo<ChartDatum[]>(() => {
-      const counts: Record<
-        OrderMode,
-        number
-      > = {
-        pickup: 0,
-        dinein: 0,
-        delivery: 0,
-      };
+  const modeChartData = useMemo<ChartDatum[]>(() => {
+    const counts: Record<OrderMode, number> = {
+      pickup: 0,
+      dinein: 0,
+      delivery: 0,
+    };
 
-      for (const order of displayedOrders) {
-        counts[order.mode] += 1;
-      }
+    for (const order of displayedOrders) {
+      counts[order.mode] += 1;
+    }
 
-      return (
-        Object.keys(
-          counts
-        ) as OrderMode[]
-      )
-        .filter(
-          (k) => counts[k] > 0
-        )
-        .map((k) => ({
-          name: MODE_LABEL[k],
-          value: counts[k],
-          color: MODE_COLORS[k],
-        }));
-    }, [displayedOrders]);
+    return (Object.keys(counts) as OrderMode[])
+      .filter((k) => counts[k] > 0)
+      .map((k) => ({
+        name: MODE_LABEL[k],
+        value: counts[k],
+        color: MODE_COLORS[k],
+      }));
+  }, [displayedOrders]);
 
   /*
    * CATEGORY CHART
    */
-  const categoryChartData =
-    useMemo<ChartDatum[]>(() => {
-      const counts =
-        new Map<string, number>();
+  const categoryChartData = useMemo<ChartDatum[]>(() => {
+    const counts = new Map<string, number>();
 
-      for (const order of displayedOrders) {
-        for (const item of order.items) {
-          counts.set(
-            item.category,
-            (counts.get(
-              item.category
-            ) ?? 0) + item.qty
-          );
-        }
+    for (const order of displayedOrders) {
+      for (const item of order.items) {
+        counts.set(item.category, (counts.get(item.category) ?? 0) + item.qty);
       }
+    }
 
-      return Array.from(
-        counts.entries()
-      )
-        .sort(
-          (a, b) => b[1] - a[1]
-        )
-        .map(
-          ([name, value], i) => ({
-            name,
-            value,
-            color:
-              CATEGORY_COLORS[
-                i %
-                  CATEGORY_COLORS.length
-              ],
-          })
-        );
-    }, [displayedOrders]);
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value], i) => ({
+        name,
+        value,
+        color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      }));
+  }, [displayedOrders]);
 
   /*
    * PAGE HEADING
@@ -399,21 +293,16 @@ export default function SalesHistoryPage() {
       ? "Today's Sales"
       : range === "month"
       ? "This Month's Sales"
-      : customStartDate &&
-        customEndDate
-      ? `Sales from ${formatDate(
-          customStartDate
-        )} to ${formatDate(
-          customEndDate
-        )}`
+      : customStartDate && customEndDate
+      ? `Sales from ${formatDate(customStartDate)} to ${formatDate(customEndDate)}`
       : "Custom Sales";
 
   const bannerLabel =
     range === "today"
-      ? "Total Revenue Received Today"
+      ? "Revenue Today"
       : range === "month"
-      ? "Total Revenue This Month"
-      : "Total Revenue for Selected Dates";
+      ? "Revenue This Month"
+      : "Revenue for Selected Dates";
 
   /*
    * CALENDAR HELPERS
@@ -421,100 +310,49 @@ export default function SalesHistoryPage() {
 
   const today = new Date();
 
-  const leftMonth = new Date(
-    calendarMonth.getFullYear(),
-    calendarMonth.getMonth(),
-    1
-  );
+  const leftMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
 
-  const rightMonth = new Date(
-    calendarMonth.getFullYear(),
-    calendarMonth.getMonth() + 1,
-    1
-  );
+  const rightMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
 
-  function createCalendarDays(
-    month: Date
-  ): (Date | null)[] {
-    const firstDay = new Date(
-      month.getFullYear(),
-      month.getMonth(),
-      1
-    );
+  function createCalendarDays(month: Date): (Date | null)[] {
+    const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
 
-    const startOffset =
-      firstDay.getDay();
+    const startOffset = firstDay.getDay();
 
-    const daysInMonth =
-      new Date(
-        month.getFullYear(),
-        month.getMonth() + 1,
-        0
-      ).getDate();
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
 
     return [
-      ...Array.from(
-        { length: startOffset },
-        () => null
-      ),
+      ...Array.from({ length: startOffset }, () => null),
       ...Array.from(
         { length: daysInMonth },
-        (_, i) =>
-          new Date(
-            month.getFullYear(),
-            month.getMonth(),
-            i + 1
-          )
+        (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1)
       ),
     ];
   }
 
-  const leftCalendarDays =
-    createCalendarDays(leftMonth);
+  const leftCalendarDays = createCalendarDays(leftMonth);
 
-  const rightCalendarDays =
-    createCalendarDays(rightMonth);
+  const rightCalendarDays = createCalendarDays(rightMonth);
 
   function goToPreviousMonth() {
-    setCalendarMonth(
-      new Date(
-        calendarMonth.getFullYear(),
-        calendarMonth.getMonth() - 1,
-        1
-      )
-    );
+    setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
   }
 
   function goToNextMonth() {
-    setCalendarMonth(
-      new Date(
-        calendarMonth.getFullYear(),
-        calendarMonth.getMonth() + 1,
-        1
-      )
-    );
+    setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
   }
 
   /*
    * DATE CLICK BEHAVIOUR
    */
-  function handleDateClick(
-    date: Date
-  ) {
-    if (
-      !pendingStartDate ||
-      (pendingStartDate &&
-        pendingEndDate)
-    ) {
+  function handleDateClick(date: Date) {
+    if (!pendingStartDate || (pendingStartDate && pendingEndDate)) {
       setPendingStartDate(date);
       setPendingEndDate(null);
       return;
     }
 
-    if (
-      date.getTime() <
-      pendingStartDate.getTime()
-    ) {
+    if (date.getTime() < pendingStartDate.getTime()) {
       setPendingStartDate(date);
       setPendingEndDate(null);
       return;
@@ -524,45 +362,25 @@ export default function SalesHistoryPage() {
   }
 
   function applyCustomDates() {
-    if (
-      !pendingStartDate ||
-      !pendingEndDate
-    )
-      return;
+    if (!pendingStartDate || !pendingEndDate) return;
 
-    setCustomStartDate(
-      pendingStartDate
-    );
-
-    setCustomEndDate(
-      pendingEndDate
-    );
+    setCustomStartDate(pendingStartDate);
+    setCustomEndDate(pendingEndDate);
 
     setRange("custom");
     setCalendarOpen(false);
   }
 
   function openCustomCalendar() {
-    setPendingStartDate(
-      customStartDate
-    );
-
-    setPendingEndDate(
-      customEndDate
-    );
+    setPendingStartDate(customStartDate);
+    setPendingEndDate(customEndDate);
 
     if (customStartDate) {
       setCalendarMonth(
-        new Date(
-          customStartDate.getFullYear(),
-          customStartDate.getMonth(),
-          1
-        )
+        new Date(customStartDate.getFullYear(), customStartDate.getMonth(), 1)
       );
     } else {
-      setCalendarMonth(
-        new Date()
-      );
+      setCalendarMonth(new Date());
     }
 
     setCalendarOpen(true);
@@ -579,22 +397,11 @@ export default function SalesHistoryPage() {
     setCalendarOpen(false);
   }
 
-  function renderCalendar(
-    days: (Date | null)[],
-    month: Date
-  ) {
+  function renderCalendar(days: (Date | null)[], month: Date) {
     return (
       <div className="w-[250px]">
         <div className="grid grid-cols-7 mb-2">
-          {[
-            "Su",
-            "Mo",
-            "Tu",
-            "We",
-            "Th",
-            "Fr",
-            "Sa",
-          ].map((day) => (
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
             <div
               key={day}
               className="text-center text-[10px] font-semibold text-black/40 py-1"
@@ -605,52 +412,22 @@ export default function SalesHistoryPage() {
         </div>
 
         <div className="grid grid-cols-7 gap-y-1">
-          {days.map(
-            (date, index) => {
-              if (!date) {
-                return (
-                  <div
-                    key={`empty-${index}`}
-                    className="h-8"
-                  />
-                );
-              }
+          {days.map((date, index) => {
+            if (!date) {
+              return <div key={`empty-${index}`} className="h-8" />;
+            }
 
-              const isStart =
-                isSameDay(
-                  date,
-                  pendingStartDate
-                );
+            const isStart = isSameDay(date, pendingStartDate);
+            const isEnd = isSameDay(date, pendingEndDate);
+            const isInRange = isBetweenDates(date, pendingStartDate, pendingEndDate);
+            const isToday = isSameDay(date, today);
 
-              const isEnd =
-                isSameDay(
-                  date,
-                  pendingEndDate
-                );
-
-              const isInRange =
-                isBetweenDates(
-                  date,
-                  pendingStartDate,
-                  pendingEndDate
-                );
-
-              const isToday =
-                isSameDay(
-                  date,
-                  today
-                );
-
-              return (
-                <button
-                  key={dateKey(date)}
-                  type="button"
-                  onClick={() =>
-                    handleDateClick(
-                      date
-                    )
-                  }
-                  className={`
+            return (
+              <button
+                key={dateKey(date)}
+                type="button"
+                onClick={() => handleDateClick(date)}
+                className={`
                     relative mx-auto h-8 w-8 rounded-full
                     text-xs font-semibold transition
                     ${
@@ -663,12 +440,11 @@ export default function SalesHistoryPage() {
                         : "text-black/75 hover:bg-black/5"
                     }
                   `}
-                >
-                  {date.getDate()}
-                </button>
-              );
-            }
-          )}
+              >
+                {date.getDate()}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -688,9 +464,7 @@ export default function SalesHistoryPage() {
 
         {/* LOCATION */}
         <p className="text-[var(--color-magenta)] text-xs font-bold tracking-[0.2em] uppercase mb-2">
-          {location
-            ? location.name
-            : "Location"}
+          {location ? location.name : "Location"}
         </p>
 
         {/* HEADING + FILTERS */}
@@ -702,9 +476,7 @@ export default function SalesHistoryPage() {
           <div className="flex items-center gap-2">
             {/* TODAY / THIS MONTH */}
             <div className="inline-flex bg-white rounded-full p-1 shadow-card gap-1">
-              {(
-                ["today", "month"] as RangeMode[]
-              ).map((r) => (
+              {(["today", "month"] as RangeMode[]).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -712,21 +484,11 @@ export default function SalesHistoryPage() {
                     setRange(r);
                     setCalendarOpen(false);
 
-                    if (
-                      r !== "custom"
-                    ) {
-                      setCustomStartDate(
-                        null
-                      );
-                      setCustomEndDate(
-                        null
-                      );
-                      setPendingStartDate(
-                        null
-                      );
-                      setPendingEndDate(
-                        null
-                      );
+                    if (r !== "custom") {
+                      setCustomStartDate(null);
+                      setCustomEndDate(null);
+                      setPendingStartDate(null);
+                      setPendingEndDate(null);
                     }
                   }}
                   className={`
@@ -739,9 +501,7 @@ export default function SalesHistoryPage() {
                     }
                   `}
                 >
-                  {r === "today"
-                    ? "Today"
-                    : "This Month"}
+                  {r === "today" ? "Today" : "This Month"}
                 </button>
               ))}
             </div>
@@ -750,9 +510,7 @@ export default function SalesHistoryPage() {
             <div className="relative">
               <button
                 type="button"
-                onClick={
-                  openCustomCalendar
-                }
+                onClick={openCustomCalendar}
                 className={`
                   inline-flex items-center gap-2
                   px-4 py-2.5 rounded-full text-xs
@@ -766,22 +524,14 @@ export default function SalesHistoryPage() {
               >
                 <CalendarIcon size={14} />
 
-                {range === "custom" &&
-                customStartDate &&
-                customEndDate
-                  ? `${customStartDate.toLocaleDateString(
-                      "en-IN",
-                      {
-                        day: "numeric",
-                        month: "short",
-                      }
-                    )} – ${customEndDate.toLocaleDateString(
-                      "en-IN",
-                      {
-                        day: "numeric",
-                        month: "short",
-                      }
-                    )}`
+                {range === "custom" && customStartDate && customEndDate
+                  ? `${customStartDate.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })} – ${customEndDate.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })}`
                   : "Custom dates"}
               </button>
 
@@ -810,24 +560,14 @@ export default function SalesHistoryPage() {
                           {!pendingStartDate
                             ? "Select a start date"
                             : !pendingEndDate
-                            ? `Start: ${formatDate(
-                                pendingStartDate
-                              )} · Select an end date`
-                            : `${formatDate(
-                                pendingStartDate
-                              )} – ${formatDate(
-                                pendingEndDate
-                              )}`}
+                            ? `Start: ${formatDate(pendingStartDate)} · Select an end date`
+                            : `${formatDate(pendingStartDate)} – ${formatDate(pendingEndDate)}`}
                         </p>
                       </div>
 
                       <button
                         type="button"
-                        onClick={() =>
-                          setCalendarOpen(
-                            false
-                          )
-                        }
+                        onClick={() => setCalendarOpen(false)}
                         className="p-1.5 rounded-full text-black/35 hover:bg-black/5 hover:text-black"
                         aria-label="Close calendar"
                       >
@@ -841,9 +581,7 @@ export default function SalesHistoryPage() {
                     <div className="flex items-center justify-between">
                       <button
                         type="button"
-                        onClick={
-                          goToPreviousMonth
-                        }
+                        onClick={goToPreviousMonth}
                         className="
                           h-8 w-8 rounded-full
                           flex items-center justify-center
@@ -853,40 +591,28 @@ export default function SalesHistoryPage() {
                         "
                         aria-label="Previous month"
                       >
-                        <ChevronLeft
-                          size={18}
-                        />
+                        <ChevronLeft size={18} />
                       </button>
 
                       <div className="grid grid-cols-2 gap-12 flex-1 text-center">
                         <p className="font-display font-extrabold text-base">
-                          {leftMonth.toLocaleDateString(
-                            "en-IN",
-                            {
-                              month:
-                                "long",
-                              year: "numeric",
-                            }
-                          )}
+                          {leftMonth.toLocaleDateString("en-IN", {
+                            month: "long",
+                            year: "numeric",
+                          })}
                         </p>
 
                         <p className="font-display font-extrabold text-base">
-                          {rightMonth.toLocaleDateString(
-                            "en-IN",
-                            {
-                              month:
-                                "long",
-                              year: "numeric",
-                            }
-                          )}
+                          {rightMonth.toLocaleDateString("en-IN", {
+                            month: "long",
+                            year: "numeric",
+                          })}
                         </p>
                       </div>
 
                       <button
                         type="button"
-                        onClick={
-                          goToNextMonth
-                        }
+                        onClick={goToNextMonth}
                         className="
                           h-8 w-8 rounded-full
                           flex items-center justify-center
@@ -896,9 +622,7 @@ export default function SalesHistoryPage() {
                         "
                         aria-label="Next month"
                       >
-                        <ChevronRight
-                          size={18}
-                        />
+                        <ChevronRight size={18} />
                       </button>
                     </div>
                   </div>
@@ -906,15 +630,8 @@ export default function SalesHistoryPage() {
                   {/* CALENDARS */}
                   <div className="px-5 py-4">
                     <div className="flex justify-center gap-8">
-                      {renderCalendar(
-                        leftCalendarDays,
-                        leftMonth
-                      )}
-
-                      {renderCalendar(
-                        rightCalendarDays,
-                        rightMonth
-                      )}
+                      {renderCalendar(leftCalendarDays, leftMonth)}
+                      {renderCalendar(rightCalendarDays, rightMonth)}
                     </div>
                   </div>
 
@@ -922,9 +639,7 @@ export default function SalesHistoryPage() {
                   <div className="border-t border-black/10 px-5 py-3 flex items-center justify-between">
                     <button
                       type="button"
-                      onClick={
-                        clearCustomDates
-                      }
+                      onClick={clearCustomDates}
                       className="
                         text-xs font-semibold
                         text-black/40
@@ -936,19 +651,13 @@ export default function SalesHistoryPage() {
 
                     <button
                       type="button"
-                      disabled={
-                        !pendingStartDate ||
-                        !pendingEndDate
-                      }
-                      onClick={
-                        applyCustomDates
-                      }
+                      disabled={!pendingStartDate || !pendingEndDate}
+                      onClick={applyCustomDates}
                       className={`
                         px-5 py-2.5 rounded-full
                         text-xs font-bold transition
                         ${
-                          pendingStartDate &&
-                          pendingEndDate
+                          pendingStartDate && pendingEndDate
                             ? "bg-[var(--color-magenta)] text-white hover:opacity-90"
                             : "bg-black/5 text-black/25 cursor-not-allowed"
                         }
@@ -966,49 +675,58 @@ export default function SalesHistoryPage() {
         {/* SUBTITLE */}
         <p className="text-black/50 text-sm mb-8">
           {displayedOrders.length} order
-          {displayedOrders.length !== 1
-            ? "s"
-            : ""}{" "}
-          · ₹
-          {totalRevenue.toLocaleString(
-            "en-IN"
-          )}{" "}
-          total revenue
+          {displayedOrders.length !== 1 ? "s" : ""} · {rupees(netRevenue)} net revenue
         </p>
 
-        {/* REVENUE BANNER */}
+        {/* REVENUE BANNER: total, discount, net */}
         {displayedOrders.length > 0 && (
-          <div className="bg-gradient-to-br from-[var(--color-magenta)] to-pink-600 rounded-3xl p-8 shadow-card mb-6 text-white flex flex-wrap items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
+          <div className="bg-gradient-to-br from-[var(--color-magenta)] to-pink-600 rounded-3xl p-8 shadow-card mb-6 text-white">
+            <div className="flex items-center gap-3 mb-6">
               <div className="bg-white/15 rounded-2xl p-3">
-                <IndianRupee
-                  size={28}
-                />
+                <IndianRupee size={24} />
               </div>
 
-              <div>
-                <p className="text-white/70 text-xs font-bold tracking-[0.2em] uppercase mb-1">
-                  {bannerLabel}
-                </p>
+              <p className="text-white/70 text-xs font-bold tracking-[0.2em] uppercase">
+                {bannerLabel}
+              </p>
+            </div>
 
-                <p className="font-display font-extrabold text-4xl">
-                  ₹
-                  {totalRevenue.toLocaleString(
-                    "en-IN"
-                  )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white/15 rounded-2xl px-5 py-4 ring-1 ring-white/25">
+                <p className="text-white/70 text-xs font-semibold uppercase mb-1">
+                  Total revenue
+                </p>
+                <p className="font-display font-extrabold text-3xl">
+                  {rupees(grossRevenue)}
+                </p>
+              </div>
+
+              <div className="bg-white/15 rounded-2xl px-5 py-4 ring-1 ring-white/25">
+                <p className="text-white/70 text-xs font-semibold uppercase mb-1">
+                  Discount
+                </p>
+                <p className="font-display font-extrabold text-3xl">
+                  {minusRupees(totalDiscount)}
+                </p>
+              </div>
+
+              <div className="bg-white text-[var(--color-magenta)] rounded-2xl px-5 py-4 shadow-lg">
+                <p className="text-[var(--color-magenta)]/70 text-xs font-semibold uppercase mb-1">
+                  Net revenue
+                </p>
+                <p className="font-display font-extrabold text-3xl">
+                  {rupees(netRevenue)}
                 </p>
               </div>
             </div>
 
-            <div className="flex gap-8">
+            <div className="flex gap-8 mt-6">
               <div>
                 <p className="text-white/70 text-xs font-semibold uppercase mb-1">
                   Orders
                 </p>
 
-                <p className="font-bold text-2xl">
-                  {displayedOrders.length}
-                </p>
+                <p className="font-bold text-2xl">{displayedOrders.length}</p>
               </div>
 
               <div>
@@ -1018,12 +736,9 @@ export default function SalesHistoryPage() {
 
                 <p className="font-bold text-2xl">
                   ₹
-                  {avgOrderValue.toLocaleString(
-                    "en-IN",
-                    {
-                      maximumFractionDigits: 0,
-                    }
-                  )}
+                  {avgOrderValue.toLocaleString("en-IN", {
+                    maximumFractionDigits: 0,
+                  })}
                 </p>
               </div>
             </div>
@@ -1035,26 +750,12 @@ export default function SalesHistoryPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             {/* CATEGORY */}
             <div className="bg-white rounded-3xl p-6 shadow-card">
-              <h2 className="font-bold text-black mb-2">
-                Items Sold by Category
-              </h2>
+              <h2 className="font-bold text-black mb-2">Items Sold by Category</h2>
 
-              <ResponsiveContainer
-                width="100%"
-                height={300}
-              >
-                <PieChart
-                  margin={{
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
-                  }}
-                >
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                   <Pie
-                    data={
-                      categoryChartData
-                    }
+                    data={categoryChartData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
@@ -1063,27 +764,14 @@ export default function SalesHistoryPage() {
                     outerRadius={70}
                     paddingAngle={3}
                   >
-                    {categoryChartData.map(
-                      (entry) => (
-                        <Cell
-                          key={entry.name}
-                          fill={entry.color}
-                        />
-                      )
-                    )}
+                    {categoryChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
                   </Pie>
 
                   <Tooltip
-                    formatter={(
-                      value: any
-                    ) =>
-                      `${value} item${
-                        Number(
-                          value
-                        ) !== 1
-                          ? "s"
-                          : ""
-                      }`
+                    formatter={(value: any) =>
+                      `${value} item${Number(value) !== 1 ? "s" : ""}`
                     }
                   />
 
@@ -1093,8 +781,7 @@ export default function SalesHistoryPage() {
                     wrapperStyle={{
                       paddingTop: 16,
                       fontSize: 12,
-                      lineHeight:
-                        "20px",
+                      lineHeight: "20px",
                     }}
                   />
                 </PieChart>
@@ -1103,26 +790,12 @@ export default function SalesHistoryPage() {
 
             {/* PAYMENT */}
             <div className="bg-white rounded-3xl p-6 shadow-card">
-              <h2 className="font-bold text-black mb-2">
-                Revenue by Payment Method
-              </h2>
+              <h2 className="font-bold text-black mb-2">Net Revenue by Payment Method</h2>
 
-              <ResponsiveContainer
-                width="100%"
-                height={300}
-              >
-                <PieChart
-                  margin={{
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
-                  }}
-                >
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                   <Pie
-                    data={
-                      paymentChartData
-                    }
+                    data={paymentChartData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
@@ -1131,25 +804,14 @@ export default function SalesHistoryPage() {
                     outerRadius={70}
                     paddingAngle={3}
                   >
-                    {paymentChartData.map(
-                      (entry) => (
-                        <Cell
-                          key={entry.name}
-                          fill={entry.color}
-                        />
-                      )
-                    )}
+                    {paymentChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
                   </Pie>
 
                   <Tooltip
-                    formatter={(
-                      value: any
-                    ) =>
-                      `₹${Number(
-                        value
-                      ).toLocaleString(
-                        "en-IN"
-                      )}`
+                    formatter={(value: any) =>
+                      `₹${Number(value).toLocaleString("en-IN")}`
                     }
                   />
 
@@ -1159,8 +821,7 @@ export default function SalesHistoryPage() {
                     wrapperStyle={{
                       paddingTop: 16,
                       fontSize: 12,
-                      lineHeight:
-                        "20px",
+                      lineHeight: "20px",
                     }}
                   />
                 </PieChart>
@@ -1169,22 +830,10 @@ export default function SalesHistoryPage() {
 
             {/* MODE */}
             <div className="bg-white rounded-3xl p-6 shadow-card">
-              <h2 className="font-bold text-black mb-2">
-                Orders by Mode
-              </h2>
+              <h2 className="font-bold text-black mb-2">Orders by Mode</h2>
 
-              <ResponsiveContainer
-                width="100%"
-                height={300}
-              >
-                <PieChart
-                  margin={{
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
-                  }}
-                >
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                   <Pie
                     data={modeChartData}
                     dataKey="value"
@@ -1195,27 +844,14 @@ export default function SalesHistoryPage() {
                     outerRadius={70}
                     paddingAngle={3}
                   >
-                    {modeChartData.map(
-                      (entry) => (
-                        <Cell
-                          key={entry.name}
-                          fill={entry.color}
-                        />
-                      )
-                    )}
+                    {modeChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
                   </Pie>
 
                   <Tooltip
-                    formatter={(
-                      value: any
-                    ) =>
-                      `${value} order${
-                        Number(
-                          value
-                        ) !== 1
-                          ? "s"
-                          : ""
-                      }`
+                    formatter={(value: any) =>
+                      `${value} order${Number(value) !== 1 ? "s" : ""}`
                     }
                   />
 
@@ -1225,8 +861,7 @@ export default function SalesHistoryPage() {
                     wrapperStyle={{
                       paddingTop: 16,
                       fontSize: 12,
-                      lineHeight:
-                        "20px",
+                      lineHeight: "20px",
                     }}
                   />
                 </PieChart>
@@ -1236,16 +871,14 @@ export default function SalesHistoryPage() {
         )}
 
         {/* NO ORDERS */}
-        {displayedOrders.length ===
-        0 ? (
+        {displayedOrders.length === 0 ? (
           <div className="bg-white rounded-3xl p-10 text-center shadow-card">
             <p className="text-black/50">
               {range === "today"
                 ? "No orders placed today yet."
                 : range === "month"
                 ? "No orders placed this month yet."
-                : customStartDate &&
-                  customEndDate
+                : customStartDate && customEndDate
                 ? "No orders placed in the selected date range."
                 : "Select a start and end date to view sales."}
             </p>
@@ -1257,215 +890,134 @@ export default function SalesHistoryPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-black/10 text-left text-black/40 text-xs uppercase tracking-wide">
-                    <th className="px-6 py-4 font-semibold">
-                      Bill No
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold">
-                      Customer
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold">
-                      Items
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold">
-                      Category
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold text-right">
-                      Qty
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold">
-                      Mode
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold">
-                      Payment
-                    </th>
-
-                    {/* DATE ADDED */}
-                    <th className="px-6 py-4 font-semibold">
-                      Date
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold">
-                      Time
-                    </th>
-
-                    <th className="px-6 py-4 font-semibold text-right">
-                      Total
-                    </th>
+                    <th className="px-6 py-4 font-semibold">Bill No</th>
+                    <th className="px-6 py-4 font-semibold">Customer</th>
+                    <th className="px-6 py-4 font-semibold">Items</th>
+                    <th className="px-6 py-4 font-semibold">Category</th>
+                    <th className="px-6 py-4 font-semibold text-right">Qty</th>
+                    <th className="px-6 py-4 font-semibold">Mode</th>
+                    <th className="px-6 py-4 font-semibold">Payment</th>
+                    <th className="px-6 py-4 font-semibold">Date</th>
+                    <th className="px-6 py-4 font-semibold">Time</th>
+                    <th className="px-6 py-4 font-semibold text-right">Total</th>
+                    <th className="px-6 py-4 font-semibold text-right">Discount</th>
+                    <th className="px-6 py-4 font-semibold text-right">Net</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {displayedOrders.map(
-                    (order) => {
-                      const paymentMethod =
-                        order.paymentMethod ??
-                        DEFAULT_PAYMENT_METHOD;
+                  {displayedOrders.map((order) => {
+                    const paymentMethod =
+                      order.paymentMethod ?? DEFAULT_PAYMENT_METHOD;
 
-                      const PayIcon =
-                        paymentIcon[
-                          paymentMethod
-                        ];
+                    const PayIcon = paymentIcon[paymentMethod];
 
-                      const orderDate =
-                        new Date(
-                          order.createdAt
-                        ).toLocaleDateString(
-                          "en-IN",
-                          {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          }
-                        );
+                    const orderDate = new Date(order.createdAt).toLocaleDateString(
+                      "en-IN",
+                      {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      }
+                    );
 
-                      const orderTime =
-                        new Date(
-                          order.createdAt
-                        ).toLocaleTimeString(
-                          "en-IN",
-                          {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }
-                        );
+                    const orderTime = new Date(order.createdAt).toLocaleTimeString(
+                      "en-IN",
+                      {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    );
 
-                      return (
-                        <tr
-                          key={order.id}
-                          className="border-b border-black/5 last:border-0 hover:bg-black/[0.02] align-top"
-                        >
-                          <td className="px-6 py-4 font-bold text-black whitespace-nowrap">
-                            {order.billNo}
-                          </td>
+                    return (
+                      <tr
+                        key={order.id}
+                        className="border-b border-black/5 last:border-0 hover:bg-black/[0.02] align-top"
+                      >
+                        <td className="px-6 py-4 font-bold text-black whitespace-nowrap">
+                          {order.billNo}
+                        </td>
 
-                          <td className="px-6 py-4 text-black/70 whitespace-nowrap">
-                            {
-                              order.customerName
-                            }
-                          </td>
+                        <td className="px-6 py-4 text-black/70 whitespace-nowrap">
+                          {order.customerName}
+                        </td>
 
-                          <td className="px-6 py-4 text-black/70">
-                            <div className="space-y-1">
-                              {order.items.map(
-                                (
-                                  item,
-                                  idx
-                                ) => (
-                                  <div
-                                    key={
-                                      idx
-                                    }
-                                    className="text-black font-medium whitespace-nowrap"
-                                  >
-                                    {
-                                      item.name
-                                    }
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          </td>
+                        <td className="px-6 py-4 text-black/70">
+                          <div className="space-y-1">
+                            {order.items.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="text-black font-medium whitespace-nowrap"
+                              >
+                                {item.name}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
 
-                          <td className="px-6 py-4 text-black/60">
-                            <div className="space-y-1">
-                              {order.items.map(
-                                (
-                                  item,
-                                  idx
-                                ) => (
-                                  <div
-                                    key={
-                                      idx
-                                    }
-                                    className="whitespace-nowrap"
-                                  >
-                                    {
-                                      item.category
-                                    }
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          </td>
+                        <td className="px-6 py-4 text-black/60">
+                          <div className="space-y-1">
+                            {order.items.map((item, idx) => (
+                              <div key={idx} className="whitespace-nowrap">
+                                {item.category}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
 
-                          <td className="px-6 py-4 text-right text-black/60">
-                            <div className="space-y-1">
-                              {order.items.map(
-                                (
-                                  item,
-                                  idx
-                                ) => (
-                                  <div
-                                    key={
-                                      idx
-                                    }
-                                  >
-                                    {
-                                      item.qty
-                                    }
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          </td>
+                        <td className="px-6 py-4 text-right text-black/60">
+                          <div className="space-y-1">
+                            {order.items.map((item, idx) => (
+                              <div key={idx}>{item.qty}</div>
+                            ))}
+                          </div>
+                        </td>
 
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`
                                 text-xs font-bold
                                 px-3 py-1.5 rounded-full
                                 capitalize
                                 ${MODE_BADGE_CLASSES[order.mode]}
                               `}
-                            >
-                              {
-                                MODE_LABEL[
-                                  order.mode
-                                ]
-                              }
-                            </span>
-                          </td>
+                          >
+                            {MODE_LABEL[order.mode]}
+                          </span>
+                        </td>
 
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-black/60 bg-black/5 px-3 py-1.5 rounded-full">
-                              <PayIcon
-                                size={13}
-                              />
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-black/60 bg-black/5 px-3 py-1.5 rounded-full">
+                            <PayIcon size={13} />
+                            {paymentLabel[paymentMethod]}
+                          </span>
+                        </td>
 
-                              {
-                                paymentLabel[
-                                  paymentMethod
-                                ]
-                              }
-                            </span>
-                          </td>
+                        <td className="px-6 py-4 text-black/50 text-xs whitespace-nowrap">
+                          {orderDate}
+                        </td>
 
-                          {/* DATE */}
-                          <td className="px-6 py-4 text-black/50 text-xs whitespace-nowrap">
-                            {orderDate}
-                          </td>
+                        <td className="px-6 py-4 text-black/40 text-xs whitespace-nowrap">
+                          {orderTime}
+                        </td>
 
-                          {/* TIME */}
-                          <td className="px-6 py-4 text-black/40 text-xs whitespace-nowrap">
-                            {orderTime}
-                          </td>
+                        {/* TOTAL */}
+                        <td className="px-6 py-4 text-right font-semibold text-black whitespace-nowrap">
+                          {rupees(grossOf(order))}
+                        </td>
 
-                          <td className="px-6 py-4 text-right font-extrabold text-[var(--color-magenta)] whitespace-nowrap">
-                            ₹
-                            {orderTotal(
-                              order
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    }
-                  )}
+                        {/* DISCOUNT */}
+                        <td className="px-6 py-4 text-right font-semibold text-red-500 whitespace-nowrap">
+                          {minusRupees(discountOf(order))}
+                        </td>
+
+                        {/* NET */}
+                        <td className="px-6 py-4 text-right font-extrabold text-[var(--color-magenta)] whitespace-nowrap">
+                          {rupees(netOf(order))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

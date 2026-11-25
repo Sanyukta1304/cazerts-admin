@@ -29,6 +29,8 @@ export type Order = {
   paymentMethod: PaymentMethod;
   status: OrderStatus;
   createdAt: string;
+  paidTotal?: number; // final amount paid (after discount)
+  discount?: number; // promo discount in rupees
 };
 
 // Order the statuses move through when staff advance an order forward.

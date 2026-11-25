@@ -4,11 +4,14 @@ import { supabase } from "./supabase";
 import { LOCATIONS } from "./locations";
 
 // ---------------------------------------------------------------
-// If your orders table uses different names, change these 4 lines.
+// If your orders table uses different names, change these lines.
+// COL_TOTAL is the final amount paid (after the promo code).
+// COL_DISCOUNT is the promo discount in rupees.
 // ---------------------------------------------------------------
 const ORDERS_TABLE = "orders";
 const COL_LOCATION = "location_id";
 const COL_TOTAL = "total";
+const COL_DISCOUNT = "discount";
 const COL_DATE = "created_at";
 
 const IST_OFFSET_MS = 330 * 60 * 1000; // India time, UTC+5:30
@@ -30,14 +33,22 @@ export type StoreSales = {
   locationId: string;
   name: string;
   address: string;
-  revenue: number;
+  gross: number; // total revenue, before discounts
+  discount: number; // promo discounts given
+  revenue: number; // net revenue (what customers actually paid)
   orders: number;
-  average: number;
-  share: number; // % of all-store sales
+  average: number; // average net per order
+  share: number; // % of all-store net sales
 };
 
 export type SalesSummary = {
-  overall: { revenue: number; orders: number; average: number };
+  overall: {
+    gross: number;
+    discount: number;
+    revenue: number; // net
+    orders: number;
+    average: number;
+  };
   bestStore: string | null;
   stores: StoreSales[];
 };
@@ -110,7 +121,7 @@ async function fetchOrders(
   for (let from = 0; ; from += pageSize) {
     let query = supabase
       .from(ORDERS_TABLE)
-      .select(`${COL_LOCATION}, ${COL_TOTAL}`);
+      .select(`${COL_LOCATION}, ${COL_TOTAL}, ${COL_DISCOUNT}`);
 
     if (since) query = query.gte(COL_DATE, since.toISOString());
     if (until) query = query.lt(COL_DATE, until.toISOString());
@@ -140,33 +151,42 @@ export async function getSalesSummary(
 
   const stores: StoreSales[] = LOCATIONS.map((loc) => {
     const mine = orders.filter((o) => o[COL_LOCATION] === loc.id);
-    const revenue = mine.reduce((sum, o) => sum + (Number(o[COL_TOTAL]) || 0), 0);
+    const net = mine.reduce((sum, o) => sum + (Number(o[COL_TOTAL]) || 0), 0);
+    const discount = mine.reduce(
+      (sum, o) => sum + (Number(o[COL_DISCOUNT]) || 0),
+      0
+    );
 
     return {
       locationId: loc.id,
       name: loc.name,
       address: loc.address,
-      revenue,
+      gross: net + discount,
+      discount,
+      revenue: net,
       orders: mine.length,
-      average: mine.length > 0 ? revenue / mine.length : 0,
+      average: mine.length > 0 ? net / mine.length : 0,
       share: 0,
     };
   });
 
-  const totalRevenue = stores.reduce((s, x) => s + x.revenue, 0);
+  const totalNet = stores.reduce((s, x) => s + x.revenue, 0);
+  const totalDiscount = stores.reduce((s, x) => s + x.discount, 0);
   const totalOrders = stores.reduce((s, x) => s + x.orders, 0);
 
   for (const s of stores) {
-    s.share = totalRevenue > 0 ? Math.round((s.revenue / totalRevenue) * 100) : 0;
+    s.share = totalNet > 0 ? Math.round((s.revenue / totalNet) * 100) : 0;
   }
 
   const best = [...stores].sort((a, b) => b.revenue - a.revenue)[0];
 
   return {
     overall: {
-      revenue: totalRevenue,
+      gross: totalNet + totalDiscount,
+      discount: totalDiscount,
+      revenue: totalNet,
       orders: totalOrders,
-      average: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      average: totalOrders > 0 ? totalNet / totalOrders : 0,
     },
     bestStore: best && best.revenue > 0 ? best.name : null,
     stores,

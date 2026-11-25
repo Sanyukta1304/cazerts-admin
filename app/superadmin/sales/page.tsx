@@ -30,6 +30,11 @@ const inr = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 0,
 });
 
+// shows a discount as "- ₹x" (or ₹0 when there is none)
+function neg(n: number) {
+  return n > 0 ? `- ${inr.format(n)}` : inr.format(0);
+}
+
 // one colour per store, used in the split bar + legend (tuned for the magenta card)
 const STORE_COLORS = ["#ffffff", "#FFC2E0", "#5B0A33"];
 
@@ -334,12 +339,12 @@ export default function SuperAdminSalesPage() {
               loading ? "opacity-50" : "opacity-100"
             }`}
           >
-            {/* CARD 1: all stores combined */}
+                        {/* CARD 1: all stores combined */}
             <motion.section
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4 }}
-              className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[var(--color-magenta)] via-[var(--color-magenta)] to-[#8E0A4E] p-7 text-white shadow-xl shadow-[var(--color-magenta)]/25 md:p-10"
+              className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[var(--color-magenta)] via-[var(--color-magenta)] to-[#8E0A4E] p-6 text-white shadow-xl shadow-[var(--color-magenta)]/25 md:p-9"
             >
               {/* soft light blobs + dot texture */}
               <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/20 blur-3xl" />
@@ -347,45 +352,69 @@ export default function SuperAdminSalesPage() {
               <div
                 className="pointer-events-none absolute inset-0 opacity-[0.08]"
                 style={{
-                  backgroundImage:
-                    "radial-gradient(#fff 1px, transparent 1px)",
+                  backgroundImage: "radial-gradient(#fff 1px, transparent 1px)",
                   backgroundSize: "22px 22px",
                 }}
               />
 
-              <div className="relative grid gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-12">
-                {/* LEFT: headline numbers */}
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/20 ring-1 ring-white/25">
-                      <TrendingUp size={21} />
-                    </div>
-                    <div>
-                      <p className="font-display text-lg font-extrabold leading-tight">
-                        All stores combined
-                      </p>
-                      <p className="text-xs text-white/70">
-                        BTM Layout + Indiranagar + Koramangala
-                      </p>
-                    </div>
+              <div className="relative">
+                {/* Header */}
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/20 ring-1 ring-white/25">
+                    <TrendingUp size={21} />
+                  </div>
+                  <div>
+                    <p className="font-display text-lg font-extrabold leading-tight">
+                      All stores combined
+                    </p>
+                    <p className="text-xs text-white/70">
+                      BTM Layout + Indiranagar + Koramangala
+                    </p>
+                  </div>
+                </div>
+
+                {/* TOTAL / DISCOUNT / NET: full width */}
+                <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
+                  <div className="rounded-2xl bg-white/15 px-5 py-5 ring-1 ring-white/25 backdrop-blur-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
+                      Total revenue
+                    </p>
+                    <p className="mt-2 whitespace-nowrap font-display text-3xl font-extrabold tracking-tight md:text-4xl">
+                      {inr.format(data.overall.gross)}
+                    </p>
                   </div>
 
-                  <p className="mt-9 text-xs font-semibold uppercase tracking-wider text-white/70">
-                    Total sales
-                  </p>
-                  <p className="mt-1 font-display text-5xl font-extrabold tracking-tight md:text-7xl">
-                    {inr.format(data.overall.revenue)}
-                  </p>
-
-                  {!hasSales && (
-                    <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/20 px-3.5 py-1.5 text-xs font-medium text-white ring-1 ring-white/25">
-                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                      {emptyText}
+                  <div className="rounded-2xl bg-white/15 px-5 py-5 ring-1 ring-white/25 backdrop-blur-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
+                      Discount
                     </p>
-                  )}
+                    <p className="mt-2 whitespace-nowrap font-display text-3xl font-extrabold tracking-tight md:text-4xl">
+                      {neg(data.overall.discount)}
+                    </p>
+                  </div>
 
-                  <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="rounded-2xl bg-white/15 px-4 py-4 ring-1 ring-white/25 backdrop-blur-sm">
+                  <div className="rounded-2xl bg-white px-5 py-5 text-[var(--color-magenta)] shadow-lg">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-magenta)]/70">
+                      Net revenue
+                    </p>
+                    <p className="mt-2 whitespace-nowrap font-display text-3xl font-extrabold tracking-tight md:text-4xl">
+                      {inr.format(data.overall.revenue)}
+                    </p>
+                  </div>
+                </div>
+
+                {!hasSales && (
+                  <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-3.5 py-1.5 text-xs font-medium text-white ring-1 ring-white/25">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    {emptyText}
+                  </p>
+                )}
+
+                {/* Stats + store split */}
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  {/* LEFT: orders, avg, top store */}
+                  <div className="grid grid-cols-2 gap-3 md:gap-4">
+                    <div className="rounded-2xl bg-white/15 px-5 py-4 ring-1 ring-white/25 backdrop-blur-sm">
                       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/70">
                         <Receipt size={12} />
                         Orders
@@ -394,85 +423,161 @@ export default function SuperAdminSalesPage() {
                         {data.overall.orders}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-white/15 px-4 py-4 ring-1 ring-white/25 backdrop-blur-sm">
+
+                    <div className="rounded-2xl bg-white/15 px-5 py-4 ring-1 ring-white/25 backdrop-blur-sm">
                       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/70">
                         <Wallet size={12} />
                         Avg order
                       </p>
-                      <p className="mt-1.5 text-2xl font-extrabold">
+                      <p className="mt-1.5 whitespace-nowrap text-2xl font-extrabold">
                         {inr.format(data.overall.average)}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-white/15 px-4 py-4 ring-1 ring-white/25 backdrop-blur-sm">
+
+                    <div className="col-span-2 rounded-2xl bg-white/15 px-5 py-4 ring-1 ring-white/25 backdrop-blur-sm">
                       <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/70">
                         <Crown size={12} />
                         Top store
                       </p>
                       <p
-                        className={`mt-1.5 truncate font-extrabold ${
-                          data.bestStore
-                            ? "text-2xl"
-                            : "text-base text-white/60"
+                        className={`mt-1.5 font-extrabold ${
+                          data.bestStore ? "text-2xl" : "text-base text-white/60"
                         }`}
                       >
                         {data.bestStore ?? "No data yet"}
                       </p>
                     </div>
                   </div>
-                </div>
 
-                {/* RIGHT: store split */}
-                <div className="flex flex-col justify-center rounded-3xl bg-white/15 p-6 ring-1 ring-white/25 backdrop-blur-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-white/70">
-                    Sales split by store
-                  </p>
+                  {/* RIGHT: net revenue split by store */}
+                  <div className="flex flex-col justify-center rounded-2xl bg-white/15 p-5 ring-1 ring-white/25 backdrop-blur-sm md:p-6">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-white/70">
+                      Net revenue split by store
+                    </p>
 
-                  {/* stacked bar */}
-                  <div className="mt-4 flex h-3 w-full gap-1 overflow-hidden rounded-full">
-                    {hasSales && totalRevenue > 0 ? (
-                      data.stores.map((s, i) => (
-                        <motion.div
-                          key={s.locationId}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${s.share}%` }}
-                          transition={{ duration: 0.8, delay: 0.2 + i * 0.1 }}
-                          style={{ background: STORE_COLORS[i % 3] }}
-                          className="h-3 rounded-full"
-                        />
-                      ))
-                    ) : (
-                      <div className="h-3 w-full rounded-full border border-dashed border-white/40 bg-white/10" />
-                    )}
-                  </div>
-
-                  {/* legend */}
-                  <div className="mt-5 space-y-3">
-                    {data.stores.map((s, i) => (
-                      <div
-                        key={s.locationId}
-                        className="flex items-center justify-between gap-3 text-sm"
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/40"
+                    {/* stacked bar */}
+                    <div className="mt-4 flex h-3 w-full gap-1 overflow-hidden rounded-full">
+                      {hasSales && totalRevenue > 0 ? (
+                        data.stores.map((s, i) => (
+                          <motion.div
+                            key={s.locationId}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${s.share}%` }}
+                            transition={{ duration: 0.8, delay: 0.2 + i * 0.1 }}
                             style={{ background: STORE_COLORS[i % 3] }}
+                            className="h-3 rounded-full"
                           />
-                          <span className="truncate text-white/90">
-                            {s.name}
+                        ))
+                      ) : (
+                        <div className="h-3 w-full rounded-full border border-dashed border-white/40 bg-white/10" />
+                      )}
+                    </div>
+
+                    {/* legend */}
+                    <div className="mt-5 space-y-3">
+                      {data.stores.map((s, i) => (
+                        <div
+                          key={s.locationId}
+                          className="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/40"
+                              style={{ background: STORE_COLORS[i % 3] }}
+                            />
+                            <span className="truncate text-white/90">{s.name}</span>
                           </span>
-                        </span>
-                        <span className="flex items-baseline gap-2">
-                          <span className="font-bold">
-                            {inr.format(s.revenue)}
+                          <span className="flex items-baseline gap-2">
+                            <span className="whitespace-nowrap font-bold">
+                              {inr.format(s.revenue)}
+                            </span>
+                            <span className="w-10 text-right text-xs text-white/65">
+                              {s.share}%
+                            </span>
                           </span>
-                          <span className="w-10 text-right text-xs text-white/65">
-                            {s.share}%
-                          </span>
-                        </span>
-                      </div>
-                    ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              </div>
+            </motion.section>
+
+            {/* REVENUE TABLE: total, discount, net */}
+            <motion.section
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.05 }}
+              className="overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm"
+            >
+              <div className="px-6 pb-3 pt-6">
+                <p className="font-display text-lg font-extrabold">
+                  Revenue breakdown
+                </p>
+                <p className="text-xs text-black/40">
+                  Net revenue = total revenue minus discounts.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-y border-black/10 text-left text-xs uppercase tracking-wide text-black/40">
+                      <th className="px-6 py-3 font-semibold">Store</th>
+                      <th className="px-6 py-3 text-right font-semibold">Orders</th>
+                      <th className="px-6 py-3 text-right font-semibold">
+                        Total revenue
+                      </th>
+                      <th className="px-6 py-3 text-right font-semibold">
+                        Discount
+                      </th>
+                      <th className="px-6 py-3 text-right font-semibold">
+                        Net revenue
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.stores.map((s) => (
+                      <tr
+                        key={s.locationId}
+                        className="border-b border-black/5 hover:bg-black/[0.02]"
+                      >
+                        <td className="whitespace-nowrap px-6 py-4 font-bold">
+                          {s.name}
+                        </td>
+                        <td className="px-6 py-4 text-right text-black/60">
+                          {s.orders}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right font-semibold">
+                          {inr.format(s.gross)}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right font-semibold text-red-500">
+                          {neg(s.discount)}
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-4 text-right font-extrabold text-[var(--color-magenta)]">
+                          {inr.format(s.revenue)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-[var(--color-cream)]">
+                      <td className="px-6 py-4 font-extrabold">All stores</td>
+                      <td className="px-6 py-4 text-right font-bold">
+                        {data.overall.orders}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right font-extrabold">
+                        {inr.format(data.overall.gross)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right font-extrabold text-red-500">
+                        {neg(data.overall.discount)}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right font-extrabold text-[var(--color-magenta)]">
+                        {inr.format(data.overall.revenue)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </motion.section>
 
@@ -531,7 +636,7 @@ export default function SuperAdminSalesPage() {
                     </div>
 
                     <p className="mt-7 text-xs font-semibold uppercase tracking-wider text-black/35">
-                      Total sales
+                      Net revenue
                     </p>
                     <p
                       className={`mt-1 font-display text-4xl font-extrabold tracking-tight ${
@@ -544,7 +649,22 @@ export default function SuperAdminSalesPage() {
                       <p className="mt-1 text-xs text-black/35">{emptyText}</p>
                     )}
 
-                    <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="mt-4 space-y-1.5 rounded-2xl bg-[var(--color-cream)] px-4 py-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-black/45">Total revenue</span>
+                        <span className="font-semibold">
+                          {inr.format(s.gross)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-black/45">Discount</span>
+                        <span className="font-semibold text-red-500">
+                          {neg(s.discount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3">
                       <div className="rounded-2xl bg-[var(--color-cream)] px-4 py-3">
                         <p className="text-[11px] font-semibold text-black/40">
                           Orders
@@ -566,7 +686,7 @@ export default function SuperAdminSalesPage() {
                     <div className="mt-5">
                       <div className="mb-1.5 flex items-center justify-between text-xs">
                         <span className="text-black/40">
-                          Share of total sales
+                          Share of net revenue
                         </span>
                         <span className="font-bold">{s.share}%</span>
                       </div>
