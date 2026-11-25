@@ -13,6 +13,7 @@ import {
   CircleCheck,
   CircleX,
   Clock,
+  FlaskConical,
   Loader2,
   MapPin,
   MessageSquareText,
@@ -31,7 +32,7 @@ const QUICK_LINKS = [
   { label: "Inventory", description: "Manage stock", slug: "inventory", icon: Boxes },
   { label: "Pickup", description: "Manage pickups", slug: "pickup", icon: Package },
   { label: "Live tracking", description: "Track deliveries", slug: "live-tracking", icon: MapPin },
-  
+  { label: "Raw material", description: "Request stock", slug: "raw-material", icon: FlaskConical },
 ];
 
 const REASON_OPTIONS = [

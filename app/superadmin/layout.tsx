@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Image as ImageIcon, LogOut, Ticket } from "lucide-react";
+import { BarChart3, FlaskConical, Image as ImageIcon, LogOut, Ticket } from "lucide-react";
 import { SUPER_ADMIN_FLAG } from "@/lib/superadmin";
 
 const NAV = [
   { label: "Sales", short: "Sales", href: "/superadmin/sales", icon: BarChart3 },
   { label: "Photos", short: "Photos", href: "/superadmin/photos", icon: ImageIcon },
   { label: "Promo codes", short: "Promos", href: "/superadmin/promocodes", icon: Ticket },
+  { label: "Raw material", short: "Raw", href: "/superadmin/raw-material", icon: FlaskConical },
 ];
 
 export default function SuperAdminLayout({
