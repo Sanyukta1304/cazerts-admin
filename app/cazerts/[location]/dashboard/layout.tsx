@@ -40,6 +40,11 @@ const NAV = [
     label: "Leaderboard",
     slug: "leaderboard",
     icon: "M6 20v-8 M12 20V4 M18 20v-5",
+  },
+  {
+    label: "Raw material",
+    slug: "raw-material",
+    icon: "M9 3h6 M10 3v6L4 19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2l-6-10V3 M7 15h10",
   }
 ];
 

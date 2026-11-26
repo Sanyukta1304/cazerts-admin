@@ -23,6 +23,13 @@ import {
   deleteCategory,
   AdminCategory,
 } from "@/lib/categories";
+import ImageCropModal from "@/components/ImageCropModal";
+
+// A photo the superadmin just picked, waiting in the crop window.
+type PendingCrop =
+  | { kind: "product"; product: AdminProduct; file: File }
+  | { kind: "gallery"; productId: string; productName: string; file: File }
+  | { kind: "category"; category: AdminCategory; file: File };
 
 export default function SuperAdminPhotosPage() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -63,6 +70,14 @@ export default function SuperAdminPhotosPage() {
   const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState<string | null>(null);
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
 
+  // "Add category" card (name only, no price)
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
+  // Crop window
+  const [pendingCrop, setPendingCrop] = useState<PendingCrop | null>(null);
+
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const galleryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const categoryInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -96,17 +111,53 @@ export default function SuperAdminPhotosPage() {
     loadCategories();
   }, []);
 
+  /* ---------------- Crop window ---------------- */
+
+  function handleCropConfirm(cropped: File) {
+    const pending = pendingCrop;
+    setPendingCrop(null);
+    if (!pending) return;
+
+    if (pending.kind === "product") {
+      void uploadMainPhoto(pending.product, cropped);
+    } else if (pending.kind === "gallery") {
+      void uploadGalleryPhoto(pending.productId, cropped);
+    } else {
+      void uploadCategoryPhoto(pending.category, cropped);
+    }
+  }
+
+  function cropTitle(p: PendingCrop) {
+    if (p.kind === "product") return `Main photo · ${p.product.name}`;
+    if (p.kind === "gallery") return `Gallery photo · ${p.productName}`;
+    return `Category cover · ${p.category.name}`;
+  }
+
+  // The exact shape of the box each photo sits in on this page:
+  // main photo box = aspect-[4/3], gallery box = square, category cover = aspect-[3/4].
+  function cropCard(p: PendingCrop): { aspect: number; label: string } {
+    if (p.kind === "product") return { aspect: 4 / 3, label: "4:3" };
+    if (p.kind === "gallery") return { aspect: 1, label: "1:1" };
+    return { aspect: 3 / 4, label: "3:4" };
+  }
+
+  /* ---------------- Main product photo ---------------- */
+
   function triggerUpload(productId: string) {
     fileInputRefs.current[productId]?.click();
   }
 
-  async function handleFileSelected(product: AdminProduct, file: File | undefined) {
+  function handleFileSelected(product: AdminProduct, file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Please choose an image file.");
       return;
     }
+    setError("");
+    setPendingCrop({ kind: "product", product, file });
+  }
 
+  async function uploadMainPhoto(product: AdminProduct, file: File) {
     setError("");
     setUploadingId(product.id);
 
@@ -135,6 +186,8 @@ export default function SuperAdminPhotosPage() {
     }
   }
 
+  /* ---------------- Gallery ---------------- */
+
   async function toggleGallery(productId: string) {
     if (expandedId === productId) {
       setExpandedId(null);
@@ -158,18 +211,25 @@ export default function SuperAdminPhotosPage() {
     galleryInputRefs.current[productId]?.click();
   }
 
-  async function handleGalleryFileSelected(productId: string, file: File | undefined) {
+  function handleGalleryFileSelected(product: AdminProduct, file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Please choose an image file.");
       return;
     }
 
-    const current = galleries[productId] ?? [];
+    const current = galleries[product.id] ?? [];
     if (current.length >= MAX_GALLERY_IMAGES) {
       setError(`You can only add up to ${MAX_GALLERY_IMAGES} gallery photos per product.`);
       return;
     }
+
+    setError("");
+    setPendingCrop({ kind: "gallery", productId: product.id, productName: product.name, file });
+  }
+
+  async function uploadGalleryPhoto(productId: string, file: File) {
+    const current = galleries[productId] ?? [];
 
     setError("");
     setGalleryUploadingId(productId);
@@ -199,6 +259,8 @@ export default function SuperAdminPhotosPage() {
       setError("Failed to remove that photo. Please try again.");
     }
   }
+
+  /* ---------------- Product name ---------------- */
 
   function startEditingName(product: AdminProduct) {
     setEditingNameId(product.id);
@@ -230,6 +292,8 @@ export default function SuperAdminPhotosPage() {
     }
   }
 
+  /* ---------------- Delete product ---------------- */
+
   function askDeleteProduct(productId: string) {
     setError("");
     setConfirmDeleteId(productId);
@@ -258,6 +322,8 @@ export default function SuperAdminPhotosPage() {
       setConfirmDeleteId(null);
     }
   }
+
+  /* ---------------- Create product ---------------- */
 
   async function handleCreateProduct() {
     setError("");
@@ -308,6 +374,41 @@ export default function SuperAdminPhotosPage() {
     }
   }
 
+  /* ---------------- Categories ---------------- */
+
+  // Adds a category on its own: just a name, no product and no price.
+  async function handleCreateCategory() {
+    const name = newCategoryName.trim();
+    setError("");
+
+    if (name.length < 2) {
+      setError("Enter a name for the category.");
+      return;
+    }
+    if (categories.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())) {
+      setError(`A category named "${name}" already exists.`);
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      const created = await createCategory(name);
+      setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewCategoryName("");
+      setShowAddCategory(false);
+    } catch (err: any) {
+      setError(err?.message || "Failed to add the category. Please try again.");
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
+  function cancelAddCategory() {
+    setShowAddCategory(false);
+    setNewCategoryName("");
+    setError("");
+  }
+
   function askDeleteCategory(categoryId: string) {
     setError("");
     setConfirmDeleteCategoryId(categoryId);
@@ -335,13 +436,17 @@ export default function SuperAdminPhotosPage() {
     categoryInputRefs.current[categoryId]?.click();
   }
 
-  async function handleCategoryFileSelected(category: AdminCategory, file: File | undefined) {
+  function handleCategoryFileSelected(category: AdminCategory, file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Please choose an image file.");
       return;
     }
+    setError("");
+    setPendingCrop({ kind: "category", category, file });
+  }
 
+  async function uploadCategoryPhoto(category: AdminCategory, file: File) {
     setError("");
     setCategoryUploadingId(category.id);
 
@@ -384,7 +489,8 @@ export default function SuperAdminPhotosPage() {
         </p>
         <h1 className="font-display font-extrabold text-3xl md:text-4xl mb-2">Product Photos</h1>
         <p className="text-black/50 text-sm mb-8">
-          Upload photos for products and category covers — resized automatically and shown live on the website.
+          Upload photos for products and category covers. Each photo opens in a crop window set to
+          the card's shape, so it fits exactly before it goes live on the website.
         </p>
 
         {error && (
@@ -570,7 +676,11 @@ export default function SuperAdminPhotosPage() {
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => handleCategoryFileSelected(category, e.target.files?.[0])}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = ""; // lets the same photo be picked again
+                        handleCategoryFileSelected(category, f);
+                      }}
                     />
                     <button
                       onClick={() => triggerCategoryUpload(category.id)}
@@ -584,6 +694,69 @@ export default function SuperAdminPhotosPage() {
                 </div>
                 );
               })}
+
+              {/* Add category card (name only, no price) */}
+              <div className="flex min-h-[260px] flex-col overflow-hidden rounded-2xl border-2 border-dashed border-black/15 bg-white/60">
+                {!showAddCategory ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCategory(true);
+                      setError("");
+                    }}
+                    className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-black/40 transition hover:bg-[var(--color-magenta)]/5 hover:text-[var(--color-magenta)]"
+                  >
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-magenta)]/10 text-[var(--color-magenta)]">
+                      <Plus size={22} />
+                    </span>
+                    <span className="text-sm font-semibold">Add category</span>
+                  </button>
+                ) : (
+                  <div className="flex flex-1 flex-col justify-center gap-3 p-4">
+                    <p className="text-xs font-bold text-black">New category</p>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleCreateCategory();
+                        if (e.key === "Escape") cancelAddCategory();
+                      }}
+                      disabled={creatingCategory}
+                      maxLength={40}
+                      placeholder="e.g. Brownies"
+                      className="w-full rounded-xl border border-black/15 bg-white px-3 py-2.5 text-sm font-semibold outline-none focus:border-[var(--color-magenta)]"
+                    />
+                    <p className="text-[11px] leading-snug text-black/40">
+                      Just a name. Upload its cover photo once it's added.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelAddCategory}
+                        disabled={creatingCategory}
+                        className="flex-1 rounded-full bg-black/5 px-3 py-2 text-[11px] font-semibold text-black/60 transition hover:bg-black/10 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCreateCategory}
+                        disabled={creatingCategory || newCategoryName.trim().length < 2}
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-full bg-[var(--color-magenta)] px-3 py-2 text-[11px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                      >
+                        {creatingCategory ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Check size={12} />
+                        )}
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -715,7 +888,11 @@ export default function SuperAdminPhotosPage() {
                           type="file"
                           accept="image/*"
                           className="hidden"
-                          onChange={(e) => handleFileSelected(product, e.target.files?.[0])}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = ""; // lets the same photo be picked again
+                            handleFileSelected(product, f);
+                          }}
                         />
                         <button
                           onClick={() => triggerUpload(product.id)}
@@ -769,9 +946,11 @@ export default function SuperAdminPhotosPage() {
                                   type="file"
                                   accept="image/*"
                                   className="hidden"
-                                  onChange={(e) =>
-                                    handleGalleryFileSelected(product.id, e.target.files?.[0])
-                                  }
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    e.target.value = ""; // lets the same photo be picked again
+                                    handleGalleryFileSelected(product, f);
+                                  }}
                                 />
                                 <button
                                   onClick={() => triggerGalleryUpload(product.id)}
@@ -801,6 +980,18 @@ export default function SuperAdminPhotosPage() {
           ))
         )}
       </div>
+
+      {/* Crop window: opens after a photo is chosen, set to the card's shape */}
+      {pendingCrop && (
+        <ImageCropModal
+          file={pendingCrop.file}
+          title={cropTitle(pendingCrop)}
+          cardAspect={cropCard(pendingCrop).aspect}
+          cardLabel={cropCard(pendingCrop).label}
+          onCancel={() => setPendingCrop(null)}
+          onConfirm={handleCropConfirm}
+        />
+      )}
     </main>
   );
 }
